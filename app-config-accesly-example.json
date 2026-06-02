@@ -1,0 +1,35 @@
+{
+  "appId": { "S": "accesly-example" },
+  "developerId": { "S": "daniel-test" },
+  "assets": {
+    "L": [
+      {
+        "M": {
+          "code": { "S": "USDC" },
+          "issuer": { "S": "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN" }
+        }
+      }
+    ]
+  },
+  "txTargets": {
+    "L": [
+      { "S": "CAQCFVLOBK5GIULPNZRGATJJMIZL5BSP7X5YJVMGCPTUEPFM4AVSRCJU" }
+    ]
+  },
+  "feeStrategy": { "S": "developer-pays" },
+  "redirectUris": { "L": [] },
+  "corsOrigins": {
+    "L": [
+      { "S": "http://localhost:5173" }
+    ]
+  },
+  "mfa": {
+    "M": {
+      "enabled": { "BOOL": false },
+      "required": { "BOOL": false },
+      "methods": { "L": [] }
+    }
+  },
+  "plan": { "S": "free" },
+  "status": { "S": "sandbox" }
+}

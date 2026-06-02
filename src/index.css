@@ -1,0 +1,39 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    font-family: theme('fontFamily.sans');
+  }
+}
+
+@layer components {
+  .accesly-card {
+    @apply bg-accesly-card border border-accesly-border rounded-2xl shadow-sm;
+  }
+  .accesly-input {
+    @apply w-full px-3.5 py-2.5 rounded-lg border border-accesly-border bg-white text-accesly-ink
+           placeholder:text-accesly-subtle focus:outline-none focus:ring-2 focus:ring-accesly-accent/40
+           focus:border-accesly-accent transition;
+  }
+  .accesly-label {
+    @apply block text-sm font-medium text-accesly-ink mb-1.5;
+  }
+  .accesly-hint {
+    @apply text-sm text-accesly-subtle;
+  }
+  .accesly-link {
+    @apply text-accesly-accent hover:text-accesly-accentDark underline-offset-2 hover:underline;
+  }
+  .accesly-pill {
+    @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium;
+  }
+}
