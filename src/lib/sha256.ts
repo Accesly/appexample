@@ -1,5 +1,9 @@
 export async function sha256(data: Uint8Array): Promise<Uint8Array> {
-  const buf = await crypto.subtle.digest('SHA-256', data);
+  // The lib.dom Uint8Array generic changed to require ArrayBuffer; copying to
+  // a fresh ArrayBuffer satisfies BufferSource regardless of TS lib version.
+  const owned = new Uint8Array(data.byteLength);
+  owned.set(data);
+  const buf = await crypto.subtle.digest('SHA-256', owned.buffer);
   return new Uint8Array(buf);
 }
 

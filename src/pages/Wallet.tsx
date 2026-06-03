@@ -400,8 +400,9 @@ export function Wallet() {
           ) : (
             <ActionCard
               title="Enviar pago"
-              desc="Pendiente: requiere componer unlock WebAuthn + GET /fragments/2."
-              disabled
+              desc="Manda XLM a otra address Stellar. Te pedirá tu passkey para firmar."
+              href="/send"
+              disabled={status !== 'on-chain'}
             />
           )}
           <ActionCard

@@ -39,13 +39,14 @@ interface WalletApiV3 {
   ensureWallet(req: {
     email: string;
     emailSalt: Uint8Array;
-    encryptionKeys: [Uint8Array, Uint8Array, Uint8Array];
+    encryptionKeys: readonly [Uint8Array, Uint8Array, Uint8Array];
     secp256r1Pubkey: Uint8Array;
     credentialId: Uint8Array;
     prfSalt: Uint8Array;
   }): Promise<{
     walletAddress: string;
-    publicKey: string;
+    /** Cuando createdNow es true, publicKey viene del flow de creación (Uint8Array). */
+    publicKey?: Uint8Array;
     status: WalletStatus;
     createdNow: boolean;
   }>;
@@ -113,21 +114,24 @@ export async function ensureWalletWithPasskey(opts: {
   const f3Key = pbkdf2Sha256(
     enc.encode(`${email}::${password}`),
     encryptionSalt,
-    600_000,
-    32,
+    { iterations: 600_000, length: 32 },
   );
 
   // 3. ensureWallet — get-or-create idempotente con crash-safety + status
   const emailSalt = getRandomBytes(32);
-  const { walletAddress, publicKey, status, createdNow } =
-    await walletApi.ensureWallet({
-      email,
-      emailSalt,
-      encryptionKeys: [f1Key, f2Key, f3Key],
-      secp256r1Pubkey: passkey.secp256r1Pubkey,
-      credentialId: passkey.credentialId,
-      prfSalt,
-    });
+  const ensureRes = await walletApi.ensureWallet({
+    email,
+    emailSalt,
+    encryptionKeys: [f1Key, f2Key, f3Key] as const,
+    secp256r1Pubkey: passkey.secp256r1Pubkey,
+    credentialId: passkey.credentialId,
+    prfSalt,
+  });
+  const { walletAddress, status, createdNow } = ensureRes;
+  // `publicKey` solo viene cuando createdNow=true. Para wallet pre-existente
+  // lo leemos del CredentialRecord en SDK store (que sí lo tiene) o caemos
+  // a "(unknown)" — el dispatcher se encarga.
+  const publicKey = ensureRes.publicKey ? bytesToHex(ensureRes.publicKey) : '';
 
   // 4. Guardar metadata local para display rápido en /wallet
   await saveCredential({

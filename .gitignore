@@ -29,6 +29,9 @@ dist-ssr
 # Vite cache
 .vite
 
+# TypeScript build info
+*.tsbuildinfo
+
 # Local certs (vite-plugin-mkcert)
 *.pem
 

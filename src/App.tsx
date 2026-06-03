@@ -6,6 +6,7 @@ import { SignUp } from './pages/SignUp';
 import { SignIn } from './pages/SignIn';
 import { CreateWallet } from './pages/CreateWallet';
 import { Wallet } from './pages/Wallet';
+import { SendPayment } from './pages/SendPayment';
 import { Recover } from './pages/Recover';
 
 export function App() {
@@ -29,6 +30,14 @@ export function App() {
           element={
             <AuthGuard>
               <Wallet />
+            </AuthGuard>
+          }
+        />
+        <Route
+          path="/send"
+          element={
+            <AuthGuard>
+              <SendPayment />
             </AuthGuard>
           }
         />
