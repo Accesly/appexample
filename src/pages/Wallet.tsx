@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAccesly } from '@accesly/react';
 import { Button } from '../components/Button';
 import { ErrorMessage } from '../components/ErrorMessage';
@@ -17,10 +17,12 @@ import type { WalletStatus } from '../lib/walletFlow';
 
 export function Wallet() {
   const { auth, wallet, kyc } = useAccesly();
+  const navigate = useNavigate();
   const [cred, setCred] = useState<LocalCredential | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [backendMissing, setBackendMissing] = useState(false);
   const [kycStatus, setKycStatus] = useState<string | null>(null);
   const [kycLoading, setKycLoading] = useState(false);
   const [status, setStatus] = useState<WalletStatus>('unknown');
@@ -42,12 +44,19 @@ export function Wallet() {
         setCred(local);
         if (local?.lastKnownStatus) setStatus(local.lastKnownStatus);
 
-        // Lee el CredentialRecord de la SDK — trae `testnetFunded` desde core 0.5.0.
+        // Lee el CredentialRecord de la SDK — trae los shards F1/F2/F3
+        // cifrados + `testnetFunded` flag. Si no existe pero el LocalCredential
+        // sí, significa que la wallet fue creada antes de configurar el
+        // `IndexedDbDeviceStore` (la SDK estaba con InMemory por default) y
+        // los shards se perdieron al reload — flag para mostrar banner.
         const sdkRecord = await wallet.getStoredCredential(auth.username);
-        if (alive && sdkRecord) {
+        if (!alive) return;
+        if (sdkRecord) {
           const funded = (sdkRecord as { testnetFunded?: boolean })
             .testnetFunded;
           setTestnetFunded(Boolean(funded));
+        } else if (local) {
+          setNoLocalShards(true);
         }
 
         // Refresh status desde el backend
@@ -65,6 +74,12 @@ export function Wallet() {
               lastStatusCheck: Date.now(),
             });
           }
+        } else if (local) {
+          // Backend dice 404 pero tenemos un LocalCredential — significa que
+          // la wallet fue eliminada del backend (cleanup en testnet, deploy
+          // testnet→mainnet, etc.). El user tiene que rehacer el flow de
+          // creación; mostramos un banner que apunta a /create-wallet.
+          setBackendMissing(true);
         }
       } catch (err) {
         if (alive) setError(describeError(err));
@@ -274,7 +289,7 @@ export function Wallet() {
         <WalletStatusBadge status={status} />
       </header>
 
-      {status === 'pending-deploy' && !noLocalShards && (
+      {status === 'pending-deploy' && !noLocalShards && !backendMissing && (
         <InfoNote tone="warning" title="Deploy on-chain pendiente">
           Tus shards están seguros en el backend y en este dispositivo, pero
           la confirmación on-chain todavía no llega. La página re-verifica
@@ -282,24 +297,72 @@ export function Wallet() {
         </InfoNote>
       )}
 
+      {backendMissing && (
+        <div className="space-y-3">
+          <InfoNote tone="warning" title="La wallet ya no existe en el backend">
+            Tenemos metadata local en este browser pero el backend no
+            reconoce esta wallet (404 en <code>GET /wallets</code>). Lo más
+            probable: la borraron en una limpieza de testnet (cambio de
+            invariantes del Smart Account constructor) o estás apuntando a
+            otro stage. Tu Cognito user sigue activo — recrea la wallet desde
+            cero usando tu passkey existente.
+          </InfoNote>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={async () => {
+                if (!auth.username) return;
+                await deleteCredential(auth.username);
+                try {
+                  await wallet.clearStoredCredential(auth.username);
+                } catch {
+                  /* no-op */
+                }
+                navigate('/create-wallet');
+              }}
+              className="px-3 py-2 rounded-lg text-sm font-medium bg-accesly-ink text-white hover:bg-black transition"
+            >
+              Limpiar metadata + Recrear wallet
+            </button>
+          </div>
+        </div>
+      )}
+
       {noLocalShards && (
         <div className="space-y-3">
           <InfoNote tone="warning" title="No hay shards locales en este device">
-            La wallet existe on-chain (verificada) pero los shards encriptados
-            no están en este browser. Probablemente la creaste con una versión
-            anterior de la SDK (pre-0.2 no persistía credentialId + prfSalt).
-            Sin shards locales no podés firmar transacciones ni hacer{' '}
-            <code>retryDeploy</code>. Opciones: usar el device original donde
-            la creaste, esperar a SEP-30 recovery (Track C ZK), o para el
-            demo, borrar metadata local y crear una wallet nueva.
+            La wallet existe on-chain (verificada) pero la SDK no tiene los
+            shards F1/F2/F3 cifrados en este browser. Es probable que la
+            hayas creado antes de habilitar persistencia con{' '}
+            <code>IndexedDbDeviceStore</code>, así que los shards se
+            perdieron al recargar. Sin shards no podés firmar transacciones.
+            Para el demo, lo más práctico es recrear la wallet desde cero
+            (en testnet no pasa nada — XLM gratis y la dirección vieja queda
+            huérfana on-chain).
           </InfoNote>
           <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={async () => {
+                if (!auth.username) return;
+                await deleteCredential(auth.username);
+                try {
+                  await wallet.clearStoredCredential(auth.username);
+                } catch {
+                  /* no-op */
+                }
+                navigate('/create-wallet');
+              }}
+              className="px-3 py-2 rounded-lg text-sm font-medium bg-accesly-ink text-white hover:bg-black transition"
+            >
+              Limpiar metadata + Recrear wallet
+            </button>
             <button
               type="button"
               onClick={handleResetLocal}
               className="px-3 py-2 rounded-lg text-xs font-medium bg-white border border-accesly-border text-accesly-danger hover:border-accesly-danger transition"
             >
-              Borrar metadata local
+              Solo borrar metadata
             </button>
           </div>
         </div>
@@ -400,9 +463,13 @@ export function Wallet() {
           ) : (
             <ActionCard
               title="Enviar pago"
-              desc="Manda XLM a otra address Stellar. Te pedirá tu passkey para firmar."
-              href="/send"
-              disabled={status !== 'on-chain'}
+              desc={
+                noLocalShards
+                  ? 'Necesitas shards locales (recrea la wallet arriba).'
+                  : 'Manda XLM a otra address Stellar. Te pedirá tu passkey para firmar.'
+              }
+              onClick={() => navigate('/send')}
+              disabled={status !== 'on-chain' || backendMissing || noLocalShards}
             />
           )}
           <ActionCard
