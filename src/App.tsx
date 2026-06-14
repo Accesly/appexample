@@ -8,6 +8,7 @@ import { CreateWallet } from './pages/CreateWallet';
 import { Wallet } from './pages/Wallet';
 import { SendPayment } from './pages/SendPayment';
 import { Recover } from './pages/Recover';
+import { RecoverFlow } from './pages/RecoverFlow';
 
 export function App() {
   return (
@@ -17,6 +18,7 @@ export function App() {
         <Route path="/signup" element={<SignUp />} />
         <Route path="/signin" element={<SignIn />} />
         <Route path="/recover" element={<Recover />} />
+        <Route path="/recover-flow" element={<RecoverFlow />} />
         <Route
           path="/create-wallet"
           element={
