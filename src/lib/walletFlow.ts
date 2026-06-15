@@ -43,6 +43,12 @@ interface WalletApiV3 {
     secp256r1Pubkey: Uint8Array;
     credentialId: Uint8Array;
     prfSalt: Uint8Array;
+    /**
+     * Recovery v2: si se provee, el SDK deriva una recoveryKey adicional
+     * (PBKDF2 sobre el password Cognito) y re-cifra F3 con ella antes de
+     * mandarla al backend. El backend NO puede descifrar F3 sin el password.
+     */
+    cognitoPassword?: Uint8Array;
   }): Promise<{
     walletAddress: string;
     /** Cuando createdNow es true, publicKey viene del flow de creación (Uint8Array). */
@@ -117,16 +123,29 @@ export async function ensureWalletWithPasskey(opts: {
     { iterations: 600_000, length: 32 },
   );
 
-  // 3. ensureWallet — get-or-create idempotente con crash-safety + status
+  // 3. ensureWallet — get-or-create idempotente con crash-safety + status.
+  //
+  // Recovery v2 (2026-06-15): pasamos `cognitoPassword` (UTF-8) para que el
+  // SDK derive recoveryKey internamente, re-cifre F3 con esa key, y lo mande
+  // al backend con `emailHash + recoverySalt`. Sin esa prop el wallet se crea
+  // pero NO podría recuperarse por OTP.
   const emailSalt = getRandomBytes(32);
-  const ensureRes = await walletApi.ensureWallet({
-    email,
-    emailSalt,
-    encryptionKeys: [f1Key, f2Key, f3Key] as const,
-    secp256r1Pubkey: passkey.secp256r1Pubkey,
-    credentialId: passkey.credentialId,
-    prfSalt,
-  });
+  const cognitoPassword = enc.encode(password);
+  let ensureRes;
+  try {
+    ensureRes = await walletApi.ensureWallet({
+      email,
+      emailSalt,
+      encryptionKeys: [f1Key, f2Key, f3Key] as const,
+      secp256r1Pubkey: passkey.secp256r1Pubkey,
+      credentialId: passkey.credentialId,
+      prfSalt,
+      cognitoPassword,
+    });
+  } finally {
+    // No leak: zeroize la copia local del password tras la llamada al SDK.
+    for (let i = 0; i < cognitoPassword.length; i += 1) cognitoPassword[i] = 0;
+  }
   const { walletAddress, status, createdNow } = ensureRes;
   // `publicKey` solo viene cuando createdNow=true. Para wallet pre-existente
   // lo leemos del CredentialRecord en SDK store (que sí lo tiene) o caemos
