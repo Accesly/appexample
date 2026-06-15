@@ -7,8 +7,7 @@ import { SignIn } from './pages/SignIn';
 import { CreateWallet } from './pages/CreateWallet';
 import { Wallet } from './pages/Wallet';
 import { SendPayment } from './pages/SendPayment';
-import { Recover } from './pages/Recover';
-import { RecoverFlow } from './pages/RecoverFlow';
+import { RecoverPlaceholder } from './pages/RecoverPlaceholder';
 
 export function App() {
   return (
@@ -17,8 +16,10 @@ export function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/signup" element={<SignUp />} />
         <Route path="/signin" element={<SignIn />} />
-        <Route path="/recover" element={<Recover />} />
-        <Route path="/recover-flow" element={<RecoverFlow />} />
+        {/* Recovery v1 (ZK email) removida con @accesly/core 1.0.0-pre.0.
+            La nueva (OTP-email + password de Cognito) llega en 1.0.0 final
+            como `recovery` namespace. Ver Plan_Final_v1.md §5. */}
+        <Route path="/recover" element={<RecoverPlaceholder />} />
         <Route
           path="/create-wallet"
           element={

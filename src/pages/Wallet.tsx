@@ -267,7 +267,7 @@ export function Wallet() {
               to="/recover"
               className="px-4 py-2 rounded-lg bg-white border border-accesly-border text-sm font-medium hover:border-accesly-ink transition"
             >
-              SEP-30 recovery
+              Recuperar wallet
             </Link>
           </div>
         </div>
