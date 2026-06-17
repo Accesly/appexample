@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAccesly } from '@accesly/react';
-import { PendingWalletsBanner } from './PendingWalletsBanner';
 
 interface LayoutProps {
   children: ReactNode;
@@ -78,7 +77,6 @@ export function Layout({ children }: LayoutProps) {
           </nav>
         </div>
       </header>
-      <PendingWalletsBanner />
       <main className="flex-1 max-w-5xl w-full mx-auto px-5 py-10">
         {children}
       </main>

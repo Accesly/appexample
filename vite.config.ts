@@ -32,7 +32,22 @@ export default defineConfig({
     port: 5173,
   },
   // Re-pre-bundle del SDK para que esbuild aplique los polyfills al pre-bundle.
+  //
+  // `include` fuerza a Vite a pre-bundlear estas deps al startup, en vez de
+  // descubrirlas en runtime cuando el SDK hace `await import('@stellar/stellar-sdk')`
+  // dentro de `wallet.bootstrap`. El discovery tardío genera un hash nuevo que
+  // no matchea con el `?v=` del módulo que el browser ya tiene abierto y tira
+  // `TypeError: Failed to fetch dynamically imported module`. Pre-bundleando
+  // upfront, el hash queda fijado antes de que el browser cargue nada.
   optimizeDeps: {
+    include: [
+      '@accesly/core',
+      '@accesly/react',
+      '@stellar/stellar-sdk',
+      '@stellar/stellar-sdk/minimal',
+      '@stellar/stellar-sdk/rpc',
+      '@stellar/stellar-sdk/contract',
+    ],
     esbuildOptions: {
       define: {
         global: 'globalThis',

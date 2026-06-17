@@ -4,28 +4,47 @@ import { BrowserRouter } from 'react-router-dom';
 import { AcceslyProvider } from '@accesly/react';
 import { IndexedDbDeviceStore } from '@accesly/core';
 import { App } from './App';
-import { BrowserSessionStorage } from './lib/sessionStorage';
 import './index.css';
 
+// Safety net: en dev, cuando Vite re-pre-bundlea deps (típicamente porque
+// instalaste/borraste algo o porque el SDK hizo discovery tardío de stellar-sdk),
+// la pestaña abierta queda apuntando a chunks con hash viejo y los dynamic
+// imports tiran `Failed to fetch dynamically imported module`. Auto-reload
+// una sola vez para que el browser pida los chunks con el hash nuevo.
+if (import.meta.env.DEV) {
+  const RELOAD_FLAG = 'accesly:vite-chunk-reload';
+  window.addEventListener('error', (e) => {
+    const msg = String(e.message || '');
+    if (/Failed to fetch dynamically imported module|Importing a module script failed/i.test(msg)) {
+      if (!sessionStorage.getItem(RELOAD_FLAG)) {
+        sessionStorage.setItem(RELOAD_FLAG, '1');
+        location.reload();
+      }
+    }
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    const msg = String(e.reason?.message || e.reason || '');
+    if (/Failed to fetch dynamically imported module|Importing a module script failed/i.test(msg)) {
+      if (!sessionStorage.getItem(RELOAD_FLAG)) {
+        sessionStorage.setItem(RELOAD_FLAG, '1');
+        location.reload();
+      }
+    }
+  });
+  window.addEventListener('load', () => sessionStorage.removeItem(RELOAD_FLAG));
+}
+
+// El SDK ya defaultea a LocalStorageSessionStorage en browsers — sin BrowserSessionStorage
+// custom. Solo overrideamos deviceStore para usar IndexedDB en vez de InMemory.
 const root = document.getElementById('root');
 if (!root) throw new Error('Missing #root container');
-
-// Una sola instancia persistente — sobrevive page reloads para no patear
-// al user a /signin cada vez que se navega con un anchor o se refresca.
-const sessionStorage = new BrowserSessionStorage();
-
-// CredentialRecord con shards F1/F2/F3 cifrados + metadata del passkey.
-// IndexedDB es la única opción que sobrevive sign-out / reload / cierre del
-// tab. Sin esto, intentar firmar después de un refresh tira
-// "La SDK no tiene CredentialRecord para este user".
-const deviceStore = new IndexedDbDeviceStore();
 
 createRoot(root).render(
   <StrictMode>
     <AcceslyProvider
       appId="accesly-example"
       env="dev"
-      overrides={{ sessionStorage, deviceStore }}
+      overrides={{ deviceStore: new IndexedDbDeviceStore() }}
     >
       <BrowserRouter>
         <App />

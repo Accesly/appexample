@@ -1,20 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAccesly } from '@accesly/react';
+import { formatError } from '@accesly/core';
 import { Button } from '../components/Button';
 import { ErrorMessage } from '../components/ErrorMessage';
-import { describeError } from '../lib/errors';
-import { getCredential } from '../lib/credentialStore';
-
-interface LocationState {
-  from?: string;
-}
 
 export function SignIn() {
   const { auth } = useAccesly();
   const navigate = useNavigate();
   const location = useLocation();
-  const fromPath = (location.state as LocationState | null)?.from;
+  const fromPath = (location.state as { from?: string } | null)?.from;
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -33,11 +28,11 @@ export function SignIn() {
     setLoading(true);
     try {
       await auth.signIn(email, password);
-      // ¿Ya tiene wallet local? Si sí, va a /wallet. Si no, a /create-wallet.
-      const local = await getCredential(email);
-      navigate(local ? '/wallet' : '/create-wallet', { replace: true });
+      // El SDK ya almacena los tokens en LocalStorageSessionStorage por default;
+      // sobrevive reloads sin BrowserSessionStorage custom.
+      navigate('/wallet', { replace: true });
     } catch (err) {
-      setError(describeError(err));
+      setError(formatError(err));
     } finally {
       setLoading(false);
     }
@@ -46,17 +41,12 @@ export function SignIn() {
   return (
     <div className="max-w-md mx-auto">
       <h1 className="text-2xl font-bold mb-1">Inicia sesión</h1>
-      <p className="accesly-hint mb-6">
-        Cognito autentica con USER_SRP_AUTH — tu contraseña jamás sale del
-        navegador en plano.
-      </p>
+      <p className="accesly-hint mb-6">Cognito con USER_SRP_AUTH — tu contraseña jamás sale del navegador en plano.</p>
 
       <div className="accesly-card p-6">
         <form onSubmit={handleSignIn} className="space-y-4">
           <div>
-            <label className="accesly-label" htmlFor="email">
-              Email
-            </label>
+            <label className="accesly-label" htmlFor="email">Email</label>
             <input
               id="email"
               type="email"
@@ -69,9 +59,7 @@ export function SignIn() {
             />
           </div>
           <div>
-            <label className="accesly-label" htmlFor="password">
-              Contraseña
-            </label>
+            <label className="accesly-label" htmlFor="password">Contraseña</label>
             <input
               id="password"
               type="password"
@@ -84,19 +72,13 @@ export function SignIn() {
             />
           </div>
           <ErrorMessage message={error} />
-          <Button type="submit" loading={loading} className="w-full">
-            Entrar
-          </Button>
+          <Button type="submit" loading={loading} className="w-full">Entrar</Button>
         </form>
       </div>
 
       <div className="mt-6 flex items-center justify-between text-sm">
-        <Link to="/signup" className="accesly-link">
-          Crear cuenta nueva
-        </Link>
-        <Link to="/recover" className="text-accesly-subtle hover:text-accesly-ink">
-          ¿Perdiste tu dispositivo?
-        </Link>
+        <Link to="/signup" className="accesly-link">Crear cuenta nueva</Link>
+        <Link to="/recover" className="text-accesly-subtle hover:text-accesly-ink">¿Perdiste tu dispositivo?</Link>
       </div>
     </div>
   );

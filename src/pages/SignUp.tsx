@@ -4,7 +4,7 @@ import { useAccesly } from '@accesly/react';
 import { Button } from '../components/Button';
 import { ErrorMessage } from '../components/ErrorMessage';
 import { InfoNote } from '../components/InfoNote';
-import { describeError } from '../lib/errors';
+import { formatError } from '@accesly/core';
 
 type Step = 'form' | 'confirm';
 
@@ -28,7 +28,7 @@ export function SignUp() {
       await auth.signUp(email, password);
       setStep('confirm');
     } catch (err) {
-      setError(describeError(err));
+      setError(formatError(err));
     } finally {
       setLoading(false);
     }
@@ -44,7 +44,7 @@ export function SignUp() {
       await auth.signIn(email, password);
       navigate('/create-wallet', { replace: true });
     } catch (err) {
-      setError(describeError(err));
+      setError(formatError(err));
     } finally {
       setLoading(false);
     }
@@ -57,7 +57,7 @@ export function SignUp() {
       await auth.resendConfirmation(email);
       setResent(true);
     } catch (err) {
-      setError(describeError(err));
+      setError(formatError(err));
     }
   }
 

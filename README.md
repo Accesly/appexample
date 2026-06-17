@@ -49,48 +49,56 @@ Abre `http://localhost:5173` y sigue el flow: **Crear cuenta nueva** → confirm
 
 ```
 src/
-├── main.tsx                # AcceslyProvider + BrowserRouter
+├── main.tsx                # AcceslyProvider + BrowserRouter + safety net Vite chunk-reload
 ├── App.tsx                 # Rutas
 ├── components/
 │   ├── Layout.tsx          # Header + footer con estado de auth reactivo
 │   ├── AuthGuard.tsx       # Redirige a /signin si no autenticado
 │   ├── Button.tsx
 │   ├── ErrorMessage.tsx
-│   └── InfoNote.tsx
-├── lib/
-│   ├── credentialStore.ts  # IndexedDB para credentialId + prfSalt + walletAddress
-│   ├── walletFlow.ts       # WebAuthn PRF + HKDF + PBKDF2 + wallet.createWallet
-│   ├── errors.ts           # Traduce errores del SDK a mensajes humanos
-│   ├── explorer.ts         # URLs a stellar.expert
-│   └── sha256.ts           # Wrapper de WebCrypto
+│   ├── InfoNote.tsx
+│   └── WalletStatusBadge.tsx
 └── pages/
     ├── Landing.tsx
     ├── SignUp.tsx          # 2 pasos: form → confirm code
     ├── SignIn.tsx
-    ├── CreateWallet.tsx    # Composición WebAuthn + createWallet
-    ├── Wallet.tsx          # Address + link explorer + KYC + acciones stub
-    └── Recover.tsx         # UI lista; throwea RecoveryNotAvailableError
+    ├── CreateWallet.tsx    # 1 llamada: wallet.bootstrap({ email, password })
+    ├── Wallet.tsx          # useWalletStatus + useBalance + useWalletHistory
+    ├── SendPayment.tsx     # tx.send({ to, amountStroops })
+    └── Recover.tsx         # auth.recover(email) — Recovery v2 (SEP-30 backend)
 ```
+
+Sin carpeta `src/lib/`. Todo el plumbing histórico (WebAuthn PRF, derivación HKDF/PBKDF2, IndexedDB store, `unlockForSigning`, mapping de errores, URLs de explorer) lo absorbió el SDK 1.3.x — el example ahora son **solo páginas** que consumen el hook.
 
 ---
 
 ## Flow técnico (resumen)
 
-### Creación de wallet (CreateWallet.tsx → lib/walletFlow.ts)
+### Creación de wallet — 1 llamada
 
-1. `registerPasskey()` con PRF extension del SDK → obtiene `secp256r1Pubkey` y `prfOutput` (32 bytes deterministas).
-2. Deriva 3 llaves AES-256:
-   - **F1key** = `HKDF(prfOutput, salt, "accesly-f1-encryption", 32)`
-   - **F2key** = `HKDF(prfOutput, salt, "accesly-f2-encryption", 32)`
-   - **F3key** = `PBKDF2(email + password, salt, 600k iter, 32)` ← para recovery
-3. `wallet.createWallet({ encryptionKeys: [F1key, F2key, F3key], secp256r1Pubkey, ... })` del SDK internamente:
-   - Genera keypair ed25519 client-side
-   - Splits Shamir 2-of-3
-   - Cifra cada fragmento con su key
-   - POST `/wallets` al backend con F2 y F3 cifrados
-   - Backend deploya el Smart Account en Stellar testnet vía OZ Relayer
-   - Devuelve `{ walletAddress, publicKey }`
-4. Guardamos `credentialId + prfSalt + walletAddress + publicKey` en IndexedDB (no la seed, no los fragmentos en plano).
+```tsx
+const { wallet, auth } = useAccesly();
+await wallet.bootstrap({ email: auth.username!, password });
+```
+
+`wallet.bootstrap(...)` internamente hace todo lo que antes el example escribía a mano:
+
+1. `registerPasskey()` con PRF extension → 32 bytes deterministas
+2. Deriva 3 llaves AES-256 (HKDF para F1/F2, PBKDF2 para F3 password-bound)
+3. Genera keypair ed25519 + Shamir split 2-of-3 + cifrado de fragmentos
+4. POST `/wallets` con F2 y F3 cifrados → backend deploya el Smart Account
+5. Friendbot auto-fund en testnet
+6. Persiste `CredentialRecord` (credentialId + prfSalt + encryptionSalt + walletAddress) en IndexedDB
+
+### Status, balance e historia — hooks reactivos
+
+```tsx
+const { status, walletAddress } = useWalletStatus(); // SSE-first, polling fallback
+const { xlm } = useBalance();                        // cache 5s + SSE push
+const { items } = useWalletHistory();                // cache 12h + cross-tab sync
+```
+
+`useWalletStatus` y `useBalance` consumen el `wallet-stream` Lambda vía Server-Sent Events — cero `setInterval`, cero polling cuando la tab está oculta.
 
 ### Premisa no-custodial
 
@@ -127,6 +135,14 @@ Cada uno está documentado en el [Handoff Fase 7](https://github.com/Accesly/SDK
 | `AuthError 401` al firmar | JWT expirado, refresh falló | Hacer sign-out y sign-in de nuevo |
 | `NetworkError` | Backend dev caído | `curl https://3fki7eiio5.execute-api.us-east-1.amazonaws.com/dev/health` |
 | `NotAllowedError` en WebAuthn | Usuario canceló el prompt | Reintentar |
+| `TypeError: Failed to fetch dynamically imported module: …stellar-sdk.min-XXX.js` | Vite re-pre-bundleó y el browser tiene el hash viejo | El listener de `main.tsx` hace `location.reload()` una vez. Si persiste: `Remove-Item -Recurse -Force node_modules\.vite; pnpm dev` |
+
+### Por qué el fix de Vite
+
+`@accesly/core` hace `import('@stellar/stellar-sdk')` dinámico para que el bundle inicial no pague el costo si la app solo autentica. Vite descubre la dep cuando se ejecuta el `import()`, la pre-bundlea, y si la pestaña ya estaba abierta el hash queda desactualizado. Mitigamos con dos capas:
+
+1. **`optimizeDeps.include` en `vite.config.ts`** — fuerza el pre-bundle al startup así nunca hay descubrimiento tardío.
+2. **Listener en `main.tsx`** — captura `Failed to fetch dynamically imported module` y hace `location.reload()` una sola vez (flag en `sessionStorage` evita loops). Solo activo en `import.meta.env.DEV`.
 
 ---
 

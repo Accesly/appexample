@@ -1,4 +1,4 @@
-import type { WalletStatus } from '../lib/walletFlow';
+import type { WalletStatus } from '@accesly/react';
 
 interface WalletStatusBadgeProps {
   status: WalletStatus;
