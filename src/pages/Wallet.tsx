@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   useAccesly,
@@ -6,8 +7,9 @@ import {
   useWalletStatus,
 } from '@accesly/react';
 import type { WalletHistoryItem } from '@accesly/core';
-import { shortAddress, stroopsToXlm, walletExplorerUrl } from '@accesly/core';
+import { formatError, shortAddress, stroopsToXlm, walletExplorerUrl } from '@accesly/core';
 import { Button } from '../components/Button';
+import { ErrorMessage } from '../components/ErrorMessage';
 import { InfoNote } from '../components/InfoNote';
 import { WalletStatusBadge } from '../components/WalletStatusBadge';
 
@@ -21,12 +23,50 @@ import { WalletStatusBadge } from '../components/WalletStatusBadge';
  * Las activities ya vienen filtradas + tipadas por el backend; no hay que
  * decodear XDR ni adivinar qué es cada evento.
  */
+type ActivateState =
+  | { kind: 'idle' }
+  | { kind: 'unlocking' }
+  | { kind: 'activating' }
+  | { kind: 'success'; txHash: string };
+
 export function Wallet() {
-  const { wallet } = useAccesly();
+  const { auth, wallet } = useAccesly();
   const navigate = useNavigate();
   const status = useWalletStatus();
   const balance = useBalance(status.walletAddress);
   const activity = useWalletHistory(status.walletAddress);
+  const [activate, setActivate] = useState<ActivateState>({ kind: 'idle' });
+  const [activateError, setActivateError] = useState<string | null>(null);
+
+  async function handleActivateUsdc() {
+    if (!auth.username) {
+      setActivateError('No hay sesión activa.');
+      return;
+    }
+    setActivateError(null);
+    let material;
+    try {
+      setActivate({ kind: 'unlocking' });
+      material = await wallet.unlockForSigning(auth.username);
+    } catch (err) {
+      setActivate({ kind: 'idle' });
+      setActivateError(formatError(err));
+      return;
+    }
+    try {
+      setActivate({ kind: 'activating' });
+      const result = await wallet.activateAsset({
+        asset: 'USDC',
+        fragmentF1Plain: material.fragmentF1Plain,
+        fragmentF2Key: material.fragmentF2Key,
+        ownerPubkey: material.ownerPubkey,
+      });
+      setActivate({ kind: 'success', txHash: result.txHash });
+    } catch (err) {
+      setActivate({ kind: 'idle' });
+      setActivateError(formatError(err));
+    }
+  }
 
   if (status.status === 'no-wallet') {
     return (
@@ -128,7 +168,36 @@ export function Wallet() {
           >
             Fondear (friendbot)
           </Button>
+          <Button
+            variant="secondary"
+            onClick={handleActivateUsdc}
+            loading={activate.kind === 'unlocking' || activate.kind === 'activating'}
+            disabled={status.status !== 'on-chain' || activate.kind !== 'idle'}
+            className="w-full sm:col-span-2"
+          >
+            {activate.kind === 'unlocking'
+              ? 'Desbloqueando passkey…'
+              : activate.kind === 'activating'
+              ? 'Activando USDC en el Smart Account…'
+              : activate.kind === 'success'
+              ? 'USDC activado ✓'
+              : 'Activar USDC en esta wallet'}
+          </Button>
         </div>
+        <ErrorMessage message={activateError} />
+        {activate.kind === 'success' && (
+          <p className="text-xs text-accesly-subtle">
+            Rule biometric-tx para USDC_SAC agregado vía admin-cfg. Ya podés enviar USDC desde
+            "Enviar pago". <a
+              href={walletExplorerUrl(activate.txHash, 'testnet').replace('/contract/', '/tx/')}
+              target="_blank"
+              rel="noreferrer"
+              className="text-blue-700"
+            >
+              ver tx →
+            </a>
+          </p>
+        )}
       </div>
 
       <div className="accesly-card p-6">
