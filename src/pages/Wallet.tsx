@@ -190,12 +190,15 @@ function ActivityRow({ event }: { event: WalletHistoryItem }) {
     );
   }
 
+  // Default a XLM cuando el backend no manda asset (audits pre-1.4).
+  const asset = event.asset ?? 'XLM';
+
   if (event.type === 'transfer-in') {
     return (
       <li className="border-b border-accesly-border pb-2 last:border-b-0">
         <div className="flex justify-between items-baseline">
           <span className="font-medium text-sm text-accesly-success">
-            ↓ Recibiste {stroopsToXlm(event.amountStroops ?? '0')} XLM
+            ↓ Recibiste {stroopsToXlm(event.amountStroops ?? '0')} {asset}
           </span>
           <span className="text-xs text-accesly-subtle">{ts}</span>
         </div>
@@ -214,7 +217,7 @@ function ActivityRow({ event }: { event: WalletHistoryItem }) {
       <li className="border-b border-accesly-border pb-2 last:border-b-0">
         <div className="flex justify-between items-baseline">
           <span className="font-medium text-sm">
-            ↑ Mandaste {stroopsToXlm(event.amountStroops ?? '0')} XLM
+            ↑ Mandaste {stroopsToXlm(event.amountStroops ?? '0')} {asset}
           </span>
           <span className="text-xs text-accesly-subtle">{ts}</span>
         </div>

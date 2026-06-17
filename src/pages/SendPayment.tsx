@@ -1,7 +1,12 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAccesly } from '@accesly/react';
-import { formatError, isValidStellarAddress, xlmToStroops } from '@accesly/core';
+import { useAccesly, useBalance, useWalletStatus } from '@accesly/react';
+import {
+  formatError,
+  isValidStellarAddress,
+  xlmToStroops,
+  type TransferAsset,
+} from '@accesly/core';
 
 import { Button } from '../components/Button';
 import { ErrorMessage } from '../components/ErrorMessage';
@@ -17,13 +22,18 @@ type Phase =
 export function SendPayment() {
   const { auth, wallet, tx } = useAccesly();
   const navigate = useNavigate();
+  const status = useWalletStatus();
+  const balance = useBalance(status.walletAddress);
   const [destination, setDestination] = useState('');
   const [amount, setAmount] = useState('');
+  const [asset, setAsset] = useState<TransferAsset>('XLM');
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
   const [error, setError] = useState<string | null>(null);
 
+  const availableBalance = asset === 'USDC' ? balance.usdc : balance.xlm;
+
   const phaseLabel: Record<Phase['kind'], string> = {
-    idle: 'Enviar XLM',
+    idle: `Enviar ${asset}`,
     unlocking: 'Desbloqueando passkey…',
     signing: 'Firmando transacción…',
     submitting: 'Enviando a la red…',
@@ -75,6 +85,7 @@ export function SendPayment() {
       const result = await tx.send({
         destinationAddress: destination.trim(),
         amountStroops: xlmToStroops(amount.trim()),
+        asset,
         fragmentF1Plain: material.fragmentF1Plain,
         fragmentF2Key: material.fragmentF2Key,
         ownerPubkey: material.ownerPubkey,
@@ -94,8 +105,9 @@ export function SendPayment() {
       <header>
         <h1 className="text-2xl font-bold">Enviar pago</h1>
         <p className="accesly-hint mt-1">
-          Manda XLM desde tu Smart Account. El backend paga el fee — vos solo
-          autorizás con tu passkey.
+          Manda XLM o USDC desde tu Smart Account. El backend paga el fee en
+          XLM independientemente del asset enviado — vos solo autorizás con tu
+          passkey.
         </p>
       </header>
 
@@ -128,6 +140,23 @@ export function SendPayment() {
       ) : (
         <form onSubmit={onSubmit} className="accesly-card p-6 space-y-4">
           <div>
+            <label htmlFor="asset" className="accesly-label">Asset</label>
+            <select
+              id="asset"
+              value={asset}
+              onChange={(e) => setAsset(e.target.value as TransferAsset)}
+              disabled={busy}
+              className="w-full text-sm px-3 py-2 rounded-lg bg-white border border-accesly-border focus:border-accesly-ink focus:outline-none transition disabled:opacity-60"
+            >
+              <option value="XLM">XLM — Stellar nativo</option>
+              <option value="USDC">USDC — stablecoin</option>
+            </select>
+            <p className="text-xs text-accesly-subtle mt-1">
+              Disponible: {availableBalance ?? '0'} {asset}
+              {asset === 'USDC' && ' · requiere wallet activado (Fase C)'}
+            </p>
+          </div>
+          <div>
             <label htmlFor="destination" className="accesly-label">Destinatario</label>
             <input
               id="destination"
@@ -142,7 +171,7 @@ export function SendPayment() {
             />
           </div>
           <div>
-            <label htmlFor="amount" className="accesly-label">Monto (XLM)</label>
+            <label htmlFor="amount" className="accesly-label">Monto ({asset})</label>
             <input
               id="amount"
               type="text"
