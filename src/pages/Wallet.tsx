@@ -76,14 +76,37 @@ export function Wallet() {
           </p>
         </div>
 
-        <div className="border-t border-accesly-border pt-5">
-          <div className="accesly-label">Balance XLM</div>
-          <div className="text-2xl font-semibold">
-            {balance.isLoading ? '…' : balance.xlm ?? '0'}{' '}
-            <span className="text-sm font-normal text-accesly-subtle">XLM</span>
+        <div className="border-t border-accesly-border pt-5 grid sm:grid-cols-2 gap-4">
+          <div>
+            <div className="accesly-label">Balance XLM</div>
+            <div className="text-2xl font-semibold">
+              {balance.isLoading ? '…' : balance.xlm ?? '0'}{' '}
+              <span className="text-sm font-normal text-accesly-subtle">XLM</span>
+            </div>
+          </div>
+          <div>
+            <div className="accesly-label flex items-center gap-1.5">
+              Balance USDC
+              <span className="text-[10px] uppercase tracking-wide text-accesly-subtle bg-accesly-bg px-1.5 py-0.5 rounded">SAC</span>
+            </div>
+            <div className="text-2xl font-semibold">
+              {balance.isLoading ? '…' : balance.usdc ?? '0'}{' '}
+              <span className="text-sm font-normal text-accesly-subtle">USDC</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (status.walletAddress) {
+                  void navigator.clipboard.writeText(status.walletAddress);
+                }
+              }}
+              className="text-xs text-blue-700 hover:underline mt-1"
+            >
+              Copiar dirección para recibir USDC
+            </button>
           </div>
           {balance.error && (
-            <p className="text-xs text-accesly-danger mt-1">No se pudo cargar el balance.</p>
+            <p className="text-xs text-accesly-danger sm:col-span-2">No se pudo cargar el balance.</p>
           )}
         </div>
       </div>
