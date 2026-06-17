@@ -163,6 +163,14 @@ export function Wallet() {
           </Button>
           <Button
             variant="secondary"
+            onClick={() => navigate('/swap')}
+            disabled={status.status !== 'on-chain'}
+            className="w-full"
+          >
+            Swap XLM ↔ USDC
+          </Button>
+          <Button
+            variant="secondary"
             onClick={() => void wallet.fundTestnet(status.walletAddress!)}
             className="w-full"
           >
