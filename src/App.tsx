@@ -8,6 +8,7 @@ import { CreateWallet } from './pages/CreateWallet';
 import { Wallet } from './pages/Wallet';
 import { SendPayment } from './pages/SendPayment';
 import { Swap } from './pages/Swap';
+import { Fiat } from './pages/Fiat';
 import { Recover } from './pages/Recover';
 
 export function App() {
@@ -48,6 +49,14 @@ export function App() {
           element={
             <AuthGuard>
               <Swap />
+            </AuthGuard>
+          }
+        />
+        <Route
+          path="/fiat"
+          element={
+            <AuthGuard>
+              <Fiat />
             </AuthGuard>
           }
         />

@@ -171,6 +171,14 @@ export function Wallet() {
           </Button>
           <Button
             variant="secondary"
+            onClick={() => navigate('/fiat')}
+            disabled={status.status !== 'on-chain'}
+            className="w-full"
+          >
+            Fiat ⇄ USDC (Etherfuse)
+          </Button>
+          <Button
+            variant="secondary"
             onClick={() => void wallet.fundTestnet(status.walletAddress!)}
             className="w-full"
           >
