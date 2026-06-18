@@ -14,9 +14,12 @@ import { InfoNote } from '../components/InfoNote';
 
 type QuotePreview = {
   amountOut: string;
+  /** Min stroops aceptables — para Soroswap viene como `minAmountOut`, para SDEX como `destMinStroops`. UI los unifica. */
   minAmountOut: string;
   priceImpactPct: string;
   platform: string;
+  /** 'soroswap' (default) o 'sdex' — controla qué endpoint se usa en submit. */
+  venue: 'soroswap' | 'sdex';
 };
 
 type Phase =
@@ -24,7 +27,7 @@ type Phase =
   | { kind: 'quoting' }
   | { kind: 'unlocking' }
   | { kind: 'submitting' }
-  | { kind: 'success'; txHash: string; explorerUrl: string; received: string; toAsset: TransferAsset };
+  | { kind: 'success'; txHash: string; explorerUrl: string; received: string; toAsset: TransferAsset; venue: 'soroswap' | 'sdex' };
 
 const QUOTE_DEBOUNCE_MS = 600;
 
@@ -42,7 +45,8 @@ export function Swap() {
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<QuotePreview | null>(null);
 
-  // Quote en vivo con debounce — se actualiza cuando el user cambia amount/asset/slippage.
+  // Quote en vivo con debounce. Primero prueba Soroswap; si no hay path (422 o
+  // similar — typical en testnet sin pools), reintenta contra SDEX classic.
   useEffect(() => {
     if (!amount.trim() || phase.kind !== 'idle') {
       setPreview(null);
@@ -50,17 +54,50 @@ export function Swap() {
     }
     let cancelled = false;
     const timer = setTimeout(async () => {
+      let amountIn: string;
       try {
-        const amountIn = xlmToStroops(amount.trim());
+        amountIn = xlmToStroops(amount.trim());
+      } catch {
+        if (!cancelled) setPreview(null);
+        return;
+      }
+      try {
         const sim = await _internal.endpoints.swapSimulate({
           fromAsset,
           toAsset,
           amountIn,
           slippageBps,
         });
-        if (!cancelled) setPreview(sim.quote);
+        if (!cancelled) {
+          setPreview({
+            amountOut: sim.quote.amountOut,
+            minAmountOut: sim.quote.minAmountOut,
+            priceImpactPct: sim.quote.priceImpactPct,
+            platform: sim.quote.platform,
+            venue: 'soroswap',
+          });
+        }
       } catch {
-        if (!cancelled) setPreview(null);
+        // Soroswap no tiene path → probar SDEX classic.
+        try {
+          const simSdex = await _internal.endpoints.swapSdexSimulate({
+            fromAsset,
+            toAsset,
+            amountIn,
+            slippageBps,
+          });
+          if (!cancelled) {
+            setPreview({
+              amountOut: simSdex.quote.amountOut,
+              minAmountOut: simSdex.quote.destMinStroops,
+              priceImpactPct: simSdex.quote.priceImpactPct,
+              platform: simSdex.quote.platform,
+              venue: 'sdex',
+            });
+          }
+        } catch {
+          if (!cancelled) setPreview(null);
+        }
       }
     }, QUOTE_DEBOUNCE_MS);
     return () => {
@@ -104,17 +141,22 @@ export function Swap() {
       return;
     }
 
+    const venue = preview?.venue ?? 'soroswap';
+    const swapInput = {
+      fromAsset,
+      toAsset,
+      amountIn,
+      slippageBps,
+      fragmentF1Plain: material.fragmentF1Plain,
+      fragmentF2Key: material.fragmentF2Key,
+      ownerPubkey: material.ownerPubkey,
+    };
     try {
       setPhase({ kind: 'submitting' });
-      const result = await tx.swap({
-        fromAsset,
-        toAsset,
-        amountIn,
-        slippageBps,
-        fragmentF1Plain: material.fragmentF1Plain,
-        fragmentF2Key: material.fragmentF2Key,
-        ownerPubkey: material.ownerPubkey,
-      });
+      const result =
+        venue === 'sdex'
+          ? await tx.swapViaSdex(swapInput)
+          : await tx.swap(swapInput);
       const received = stroopsToXlm(result.quote.amountOut);
       setPhase({
         kind: 'success',
@@ -122,6 +164,7 @@ export function Swap() {
         explorerUrl: result.explorerUrl,
         received,
         toAsset,
+        venue,
       });
     } catch (err) {
       setPhase({ kind: 'idle' });
@@ -145,7 +188,9 @@ export function Swap() {
 
       {phase.kind === 'success' ? (
         <div className="accesly-card p-6 space-y-4">
-          <div className="text-accesly-success font-semibold">✓ Swap ejecutado</div>
+          <div className="text-accesly-success font-semibold">
+            ✓ Swap ejecutado vía {phase.venue === 'sdex' ? 'SDEX classic' : 'Soroswap'}
+          </div>
           <div className="text-sm">
             Recibiste <span className="font-mono">{phase.received}</span> {phase.toAsset}
           </div>
