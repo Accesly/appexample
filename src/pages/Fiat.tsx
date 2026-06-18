@@ -178,6 +178,11 @@ function KycCard({
               Reanudar formulario de Etherfuse →
             </a>
           )}
+          {kyc.status === 'pending' && !kyc.hostedUrl && (
+            <Button onClick={onStart}>
+              Reanudar KYC en Etherfuse
+            </Button>
+          )}
           <Button variant="ghost" onClick={onRefresh}>
             Refrescar status
           </Button>
