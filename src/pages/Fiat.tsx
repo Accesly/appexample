@@ -199,7 +199,10 @@ function BankAccountsCard({
   const { fiat } = useAccesly();
   const [open, setOpen] = useState(false);
   const [clabe, setClabe] = useState('');
-  const [holderName, setHolderName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [paternalLastName, setPaternalLastName] = useState('');
+  const [maternalLastName, setMaternalLastName] = useState('');
+  const [birthDate, setBirthDate] = useState('');
   const [holderRfc, setHolderRfc] = useState('');
   const [holderCurp, setHolderCurp] = useState('');
   const [label, setLabel] = useState('');
@@ -211,10 +214,12 @@ function BankAccountsCard({
     try {
       const res = await fiat.registerBankAccount({
         clabe,
-        holderName,
+        firstName,
+        paternalLastName,
+        maternalLastName,
+        birthDate,
         holderRfc,
-        ...(holderCurp ? { holderCurp } : {}),
-        accountType: 'PERSONAL',
+        holderCurp,
         ...(label ? { label } : {}),
       });
       onRegistered({
@@ -225,7 +230,10 @@ function BankAccountsCard({
       });
       setOpen(false);
       setClabe('');
-      setHolderName('');
+      setFirstName('');
+      setPaternalLastName('');
+      setMaternalLastName('');
+      setBirthDate('');
       setHolderRfc('');
       setHolderCurp('');
       setLabel('');
@@ -283,30 +291,63 @@ function BankAccountsCard({
               className="w-full text-sm px-3 py-2 rounded-lg bg-white border border-accesly-border focus:border-accesly-ink focus:outline-none transition"
             />
           </div>
-          <div>
-            <label className="accesly-label">Nombre del titular</label>
-            <input
-              required
-              value={holderName}
-              onChange={(e) => setHolderName(e.target.value)}
-              placeholder="Juan Pérez García"
-              className="w-full text-sm px-3 py-2 rounded-lg bg-white border border-accesly-border focus:border-accesly-ink focus:outline-none transition"
-            />
+          <div className="grid sm:grid-cols-3 gap-3">
+            <div>
+              <label className="accesly-label">Nombre(s)</label>
+              <input
+                required
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                placeholder="Juan"
+                className="w-full text-sm px-3 py-2 rounded-lg bg-white border border-accesly-border focus:border-accesly-ink focus:outline-none transition"
+              />
+            </div>
+            <div>
+              <label className="accesly-label">Apellido paterno</label>
+              <input
+                required
+                value={paternalLastName}
+                onChange={(e) => setPaternalLastName(e.target.value)}
+                placeholder="Pérez"
+                className="w-full text-sm px-3 py-2 rounded-lg bg-white border border-accesly-border focus:border-accesly-ink focus:outline-none transition"
+              />
+            </div>
+            <div>
+              <label className="accesly-label">Apellido materno</label>
+              <input
+                required
+                value={maternalLastName}
+                onChange={(e) => setMaternalLastName(e.target.value)}
+                placeholder="García"
+                className="w-full text-sm px-3 py-2 rounded-lg bg-white border border-accesly-border focus:border-accesly-ink focus:outline-none transition"
+              />
+            </div>
           </div>
-          <div className="grid sm:grid-cols-2 gap-3">
+          <div className="grid sm:grid-cols-3 gap-3">
+            <div>
+              <label className="accesly-label">Fecha de nacimiento</label>
+              <input
+                required
+                type="date"
+                value={birthDate}
+                onChange={(e) => setBirthDate(e.target.value)}
+                className="w-full text-sm px-3 py-2 rounded-lg bg-white border border-accesly-border focus:border-accesly-ink focus:outline-none transition"
+              />
+            </div>
             <div>
               <label className="accesly-label">RFC</label>
               <input
                 required
                 value={holderRfc}
                 onChange={(e) => setHolderRfc(e.target.value.toUpperCase())}
-                placeholder="PEPG800101AB1"
+                placeholder="XEXX010101000 en sandbox"
                 className="w-full text-sm px-3 py-2 rounded-lg bg-white border border-accesly-border focus:border-accesly-ink focus:outline-none transition"
               />
             </div>
             <div>
-              <label className="accesly-label">CURP (opcional)</label>
+              <label className="accesly-label">CURP</label>
               <input
+                required
                 value={holderCurp}
                 onChange={(e) => setHolderCurp(e.target.value.toUpperCase())}
                 placeholder="PEPG800101HDFRRR01"
