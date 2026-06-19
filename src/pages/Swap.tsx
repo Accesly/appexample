@@ -26,6 +26,7 @@ type Phase =
   | { kind: 'idle' }
   | { kind: 'quoting' }
   | { kind: 'unlocking' }
+  | { kind: 'bootstrap-g' }
   | { kind: 'submitting' }
   | { kind: 'success'; txHash: string; explorerUrl: string; received: string; toAsset: TransferAsset; venue: 'soroswap' | 'sdex' };
 
@@ -44,21 +45,30 @@ export function Swap() {
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<QuotePreview | null>(null);
+  const [quoting, setQuoting] = useState(false);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
 
   // Quote en vivo con debounce. Primero prueba Soroswap; si no hay path (422 o
   // similar — typical en testnet sin pools), reintenta contra SDEX classic.
   useEffect(() => {
     if (!amount.trim() || phase.kind !== 'idle') {
       setPreview(null);
+      setQuoting(false);
+      setQuoteError(null);
       return undefined;
     }
     let cancelled = false;
+    setQuoting(true);
+    setQuoteError(null);
     const timer = setTimeout(async () => {
       let amountIn: string;
       try {
         amountIn = xlmToStroops(amount.trim());
       } catch {
-        if (!cancelled) setPreview(null);
+        if (!cancelled) {
+          setPreview(null);
+          setQuoting(false);
+        }
         return;
       }
       try {
@@ -76,6 +86,7 @@ export function Swap() {
             platform: sim.quote.platform,
             venue: 'soroswap',
           });
+          setQuoting(false);
         }
       } catch {
         // Soroswap no tiene path → probar SDEX classic.
@@ -94,9 +105,14 @@ export function Swap() {
               platform: simSdex.quote.platform,
               venue: 'sdex',
             });
+            setQuoting(false);
           }
-        } catch {
-          if (!cancelled) setPreview(null);
+        } catch (err) {
+          if (!cancelled) {
+            setPreview(null);
+            setQuoting(false);
+            setQuoteError(formatError(err));
+          }
         }
       }
     }, QUOTE_DEBOUNCE_MS);
@@ -123,6 +139,17 @@ export function Swap() {
       setError('fromAsset y toAsset deben ser distintos.');
       return;
     }
+    if (quoting) {
+      setError('Esperá a que termine la cotización.');
+      return;
+    }
+    if (!preview) {
+      setError(
+        quoteError ??
+          'No hay cotización disponible para este monto. Probá un valor distinto.',
+      );
+      return;
+    }
     let amountIn: string;
     try {
       amountIn = xlmToStroops(amount.trim());
@@ -141,7 +168,7 @@ export function Swap() {
       return;
     }
 
-    const venue = preview?.venue ?? 'soroswap';
+    const venue = preview.venue;
     const swapInput = {
       fromAsset,
       toAsset,
@@ -151,6 +178,24 @@ export function Swap() {
       fragmentF2Key: material.fragmentF2Key,
       ownerPubkey: material.ownerPubkey,
     };
+
+    // Fase IV: swapViaSdex requiere que la G-address bridge esté bootstrapped.
+    // Es idempotente — si ya está, retorna sin tocar nada.
+    if (venue === 'sdex') {
+      try {
+        setPhase({ kind: 'bootstrap-g' });
+        await wallet.bootstrapG({
+          fragmentF1Plain: material.fragmentF1Plain,
+          fragmentF2Key: material.fragmentF2Key,
+          ownerPubkey: material.ownerPubkey,
+        });
+      } catch (err) {
+        setPhase({ kind: 'idle' });
+        setError(formatError(err));
+        return;
+      }
+    }
+
     try {
       setPhase({ kind: 'submitting' });
       const result =
@@ -173,7 +218,10 @@ export function Swap() {
   }
 
   const busy =
-    phase.kind === 'quoting' || phase.kind === 'unlocking' || phase.kind === 'submitting';
+    phase.kind === 'quoting' ||
+    phase.kind === 'unlocking' ||
+    phase.kind === 'bootstrap-g' ||
+    phase.kind === 'submitting';
   const availableFrom = fromAsset === 'USDC' ? balance.usdc : balance.xlm;
 
   return (
@@ -321,6 +369,18 @@ export function Swap() {
             </div>
           </div>
 
+          {quoting && (
+            <div className="rounded-lg bg-accesly-bg border border-accesly-border px-3 py-2 text-xs text-accesly-subtle">
+              Calculando cotización…
+            </div>
+          )}
+
+          {!quoting && !preview && quoteError && amount.trim() && (
+            <div className="rounded-lg bg-accesly-bg border border-accesly-border px-3 py-2 text-xs text-accesly-danger">
+              No hay liquidez disponible: {quoteError}
+            </div>
+          )}
+
           {preview && (
             <div className="rounded-lg bg-accesly-bg border border-accesly-border px-3 py-2 text-xs">
               <div className="flex justify-between">
@@ -349,11 +409,20 @@ export function Swap() {
           <ErrorMessage message={error} />
 
           <div className="flex items-center gap-3 pt-1">
-            <Button type="submit" variant="primary" loading={busy} disabled={busy}>
+            <Button
+              type="submit"
+              variant="primary"
+              loading={busy || quoting}
+              disabled={busy || quoting || !preview}
+            >
               {phase.kind === 'unlocking'
                 ? 'Desbloqueando passkey…'
+                : phase.kind === 'bootstrap-g'
+                ? 'Preparando bridge G-address…'
                 : phase.kind === 'submitting'
                 ? 'Swap en curso…'
+                : quoting
+                ? 'Calculando…'
                 : `Swap ${fromAsset} → ${toAsset}`}
             </Button>
             <Link to="/wallet" className="text-sm text-accesly-subtle hover:text-accesly-ink transition">
