@@ -129,6 +129,10 @@ export function Fiat() {
       <KycCard kyc={kyc} bridgePhase={bridgePhase} onStart={handleStartKyc} onRefresh={refreshKyc} />
 
       {kyc.status !== 'not_started' && (
+        <BridgeBalanceCard onError={setError} onInfo={setInfo} />
+      )}
+
+      {kyc.status !== 'not_started' && (
         <BankAccountsCard
           bankAccounts={bankAccounts}
           onRegistered={(b) => {
@@ -507,10 +511,13 @@ function OfframpCard({
   bankAccounts: BankAccount[];
   onError: (msg: string) => void;
 }) {
-  const { fiat } = useAccesly();
+  const { auth, wallet, tx, fiat, _internal } = useAccesly();
   const [amountUsdc, setAmountUsdc] = useState('');
   const [bankAccountId, setBankAccountId] = useState(bankAccounts[0]?.bankAccountId ?? '');
   const [state, setState] = useState<OfframpState>({ kind: 'idle' });
+  const [bridgePhase, setBridgePhase] = useState<
+    'idle' | 'unlocking' | 'moving' | 'etherfuse'
+  >('idle');
 
   async function onQuote(e: React.FormEvent) {
     e.preventDefault();
@@ -529,17 +536,58 @@ function OfframpCard({
     }
   }
 
+  /**
+   * Fase III: el offramp Etherfuse manda SPEI desde la G del user. Antes de
+   * llamar submit, hay que mover el USDC del SA → G via tx.send. La G se
+   * vacía al instante después (Etherfuse barre).
+   */
   async function onSubmit() {
     if (state.kind !== 'quoted') return;
+    if (!auth.username) {
+      onError('No hay sesión activa.');
+      return;
+    }
     setState({ kind: 'submitting' });
     try {
+      // 1. Resolver gAddress (idempotente — backend devuelve la actual).
+      const sim = await _internal.endpoints.bootstrapGSimulate();
+
+      // 2. Passkey unlock.
+      setBridgePhase('unlocking');
+      const material = await wallet.unlockForSigning(auth.username);
+
+      // 3. tx.send USDC SA → G.
+      setBridgePhase('moving');
+      const amountStroops = String(Math.round(Number(amountUsdc) * 1e7));
+      await tx.send({
+        amountStroops,
+        destinationAddress: sim.gAddress,
+        asset: 'USDC',
+        fragmentF1Plain: material.fragmentF1Plain,
+        fragmentF2Key: material.fragmentF2Key,
+        ownerPubkey: material.ownerPubkey,
+      });
+
+      // 4. Etherfuse drena la G via SPEI.
+      setBridgePhase('etherfuse');
       const o = await fiat.submitOfframp({ quoteId: state.quoteId });
+      setBridgePhase('idle');
       setState({ kind: 'submitted', orderId: o.orderId ?? '', status: o.status });
     } catch (err) {
+      setBridgePhase('idle');
       onError(formatError(err));
       setState({ kind: 'idle' });
     }
   }
+
+  const phaseMsg =
+    bridgePhase === 'unlocking'
+      ? 'Desbloqueando passkey…'
+      : bridgePhase === 'moving'
+      ? 'Moviendo USDC del Smart Account al bridge…'
+      : bridgePhase === 'etherfuse'
+      ? 'Etherfuse procesando SPEI…'
+      : null;
 
   return (
     <div className="accesly-card p-6 space-y-3">
@@ -581,8 +629,14 @@ function OfframpCard({
           <div>Recibirás: <span className="font-mono">{state.amountMxn} MXN</span></div>
           <div>FX rate: <span className="font-mono">{state.fxRate}</span></div>
           <div className="text-xs text-accesly-subtle">Quote ID: {state.quoteId}</div>
-          <Button onClick={onSubmit} className="mt-2">
-            Confirmar offramp
+          {phaseMsg && <div className="text-xs text-accesly-subtle">{phaseMsg}</div>}
+          <Button
+            onClick={onSubmit}
+            className="mt-2"
+            loading={bridgePhase !== 'idle'}
+            disabled={bridgePhase !== 'idle'}
+          >
+            {bridgePhase !== 'idle' ? 'Procesando…' : 'Confirmar offramp'}
           </Button>
         </div>
       )}
@@ -592,6 +646,149 @@ function OfframpCard({
           <div className="text-xs">Order ID: {state.orderId}</div>
           <div className="text-xs">Status: {state.status}</div>
         </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Card que muestra el balance USDC pendiente en la G-address bridge del user
+ * (lo que Etherfuse acaba de depositar). Pollea Horizon directo. El botón
+ * "Reclamar" dispara wallet.sweepGToSA → fee-bump tx por channels-fund.
+ */
+function BridgeBalanceCard({
+  onError,
+  onInfo,
+}: {
+  onError: (msg: string) => void;
+  onInfo: (msg: string) => void;
+}) {
+  const { auth, wallet, _internal } = useAccesly();
+  const [gAddress, setGAddress] = useState<string | null>(null);
+  const [usdcBalance, setUsdcBalance] = useState<string>('0');
+  const [phase, setPhase] = useState<'idle' | 'unlocking' | 'sweeping'>('idle');
+  const HORIZON_URL = 'https://horizon-testnet.stellar.org';
+  const USDC_ISSUER = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
+
+  // Resuelve gAddress UNA vez via bootstrapGSimulate (idempotente).
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const sim = await _internal.endpoints.bootstrapGSimulate();
+        if (!cancelled) setGAddress(sim.gAddress);
+      } catch {
+        // wallet sin G bootstrap aún — skipeamos en silencio.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [_internal.endpoints]);
+
+  // Pollea Horizon cada 15s para detectar deposits en la G.
+  useEffect(() => {
+    if (!gAddress) return undefined;
+    let cancelled = false;
+    async function fetchBalance() {
+      try {
+        const res = await fetch(`${HORIZON_URL}/accounts/${gAddress}`);
+        if (!res.ok) return;
+        const json = (await res.json()) as {
+          balances: Array<{
+            asset_type: string;
+            asset_code?: string;
+            asset_issuer?: string;
+            balance: string;
+          }>;
+        };
+        const usdc = json.balances.find(
+          (b) =>
+            (b.asset_type === 'credit_alphanum4' || b.asset_type === 'credit_alphanum12') &&
+            b.asset_code === 'USDC' &&
+            b.asset_issuer === USDC_ISSUER,
+        );
+        if (!cancelled) setUsdcBalance(usdc?.balance ?? '0');
+      } catch {
+        // network blip — silent retry next tick.
+      }
+    }
+    void fetchBalance();
+    const interval = setInterval(fetchBalance, 15_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [gAddress]);
+
+  const hasBalance = Number(usdcBalance) > 0;
+
+  async function onClaim() {
+    if (!auth.username) {
+      onError('No hay sesión activa.');
+      return;
+    }
+    onError('');
+    setPhase('unlocking');
+    try {
+      const material = await wallet.unlockForSigning(auth.username);
+      setPhase('sweeping');
+      const res = await wallet.sweepGToSA({
+        fragmentF1Plain: material.fragmentF1Plain,
+        fragmentF2Key: material.fragmentF2Key,
+        ownerPubkey: material.ownerPubkey,
+      });
+      setPhase('idle');
+      if (res.alreadyEmpty) {
+        onInfo('La G ya estaba vacía (otro tab te ganó la carrera).');
+      } else {
+        const amount = (Number(res.amountStroops) / 1e7).toFixed(7);
+        onInfo(`✓ Reclamados ${amount} USDC al Smart Account · tx ${res.txHash?.slice(0, 8)}…`);
+      }
+      setUsdcBalance('0');
+    } catch (err) {
+      setPhase('idle');
+      onError(formatError(err));
+    }
+  }
+
+  if (!gAddress) return null;
+
+  const busy = phase !== 'idle';
+  const phaseMsg =
+    phase === 'unlocking'
+      ? 'Desbloqueando passkey…'
+      : phase === 'sweeping'
+      ? 'Moviendo USDC al Smart Account…'
+      : null;
+
+  return (
+    <div className="accesly-card p-6 space-y-3">
+      <div className="flex justify-between items-baseline">
+        <h2 className="font-semibold">Bridge G-address</h2>
+        <code className="font-mono text-xs text-accesly-subtle">
+          {gAddress.slice(0, 6)}…{gAddress.slice(-4)}
+        </code>
+      </div>
+      {hasBalance ? (
+        <>
+          <p className="text-sm">
+            Tu bridge tiene <span className="font-mono">{usdcBalance}</span> USDC esperando.
+            Reclamálos a tu Smart Account.
+          </p>
+          {phaseMsg && <p className="text-xs text-accesly-subtle">{phaseMsg}</p>}
+          <Button onClick={onClaim} loading={busy} disabled={busy}>
+            {busy ? 'Procesando…' : 'Reclamar USDC al Smart Account'}
+          </Button>
+          <p className="text-xs text-accesly-subtle">
+            El backend paga el fee de gas. Vos solo firmás con tu passkey.
+          </p>
+        </>
+      ) : (
+        <p className="text-sm text-accesly-subtle">
+          Sin depósitos pendientes. Cuando Etherfuse complete un onramp el USDC va a aparecer
+          acá.
+        </p>
       )}
     </div>
   );
