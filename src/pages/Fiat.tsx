@@ -56,6 +56,42 @@ export function Fiat() {
     void refreshKyc();
   }, []);
 
+  /**
+   * Fase V (polling): cuando el user vuelve de la pestaña Etherfuse al tab de
+   * Accesly y su KYC sigue en `pending`, polleamos cada 10s durante 2 min. El
+   * webhook puede no estar registrado (sandbox common) — el GET /kyc del
+   * backend ya hace check en vivo contra Etherfuse, así que el refresh resuelve.
+   */
+  useEffect(() => {
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    function start() {
+      if (kyc.status !== 'pending') return;
+      if (intervalId) return;
+      intervalId = setInterval(() => void refreshKyc(), 10_000);
+      timeoutId = setTimeout(() => {
+        if (intervalId) clearInterval(intervalId);
+        intervalId = null;
+      }, 120_000);
+    }
+    function stop() {
+      if (intervalId) clearInterval(intervalId);
+      if (timeoutId) clearTimeout(timeoutId);
+      intervalId = null;
+      timeoutId = null;
+    }
+    function onVisibility() {
+      if (document.visibilityState === 'visible') start();
+      else stop();
+    }
+    if (kyc.status === 'pending' && document.visibilityState === 'visible') start();
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      stop();
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [kyc.status]);
+
   async function refreshKyc() {
     try {
       const s = await fiat.kycStatus();
