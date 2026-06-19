@@ -44,11 +44,12 @@ type OfframpState =
   | { kind: 'submitted'; orderId: string; status: string };
 
 export function Fiat() {
-  const { fiat } = useAccesly();
+  const { auth, wallet, fiat, _internal } = useAccesly();
   const [kyc, setKyc] = useState<KycInfo>({ status: 'not_started', hostedUrl: null, customerId: null });
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [bridgePhase, setBridgePhase] = useState<'idle' | 'checking' | 'unlocking' | 'creating'>('idle');
 
   // KYC status al mount
   useEffect(() => {
@@ -71,9 +72,34 @@ export function Fiat() {
     }
   }
 
+  /**
+   * Fase II (1.10+): Etherfuse necesita una G-address con trustline USDC.
+   * Antes de cualquier interacción con su API, asegurar que el bridge esté
+   * bootstrapped. Idempotente: si ya está, retorna sin pedir passkey.
+   */
+  async function ensureBridgeReady(): Promise<void> {
+    setBridgePhase('checking');
+    const sim = await _internal.endpoints.bootstrapGSimulate();
+    if (sim.alreadyBootstrapped) {
+      setBridgePhase('idle');
+      return;
+    }
+    if (!auth.username) throw new Error('No hay sesión activa.');
+    setBridgePhase('unlocking');
+    const material = await wallet.unlockForSigning(auth.username);
+    setBridgePhase('creating');
+    await wallet.bootstrapG({
+      fragmentF1Plain: material.fragmentF1Plain,
+      fragmentF2Key: material.fragmentF2Key,
+      ownerPubkey: material.ownerPubkey,
+    });
+    setBridgePhase('idle');
+  }
+
   async function handleStartKyc() {
     setError(null);
     try {
+      await ensureBridgeReady();
       const res = await fiat.startKyc();
       setKyc({
         status: (res.status as KycInfo['status']) ?? 'pending',
@@ -82,6 +108,7 @@ export function Fiat() {
       });
       if (res.hostedUrl) window.open(res.hostedUrl, '_blank', 'noopener,noreferrer');
     } catch (err) {
+      setBridgePhase('idle');
       setError(formatError(err));
     }
   }
@@ -99,7 +126,7 @@ export function Fiat() {
       <ErrorMessage message={error} />
       {info && <InfoNote tone="info" title="OK">{info}</InfoNote>}
 
-      <KycCard kyc={kyc} onStart={handleStartKyc} onRefresh={refreshKyc} />
+      <KycCard kyc={kyc} bridgePhase={bridgePhase} onStart={handleStartKyc} onRefresh={refreshKyc} />
 
       {kyc.status !== 'not_started' && (
         <BankAccountsCard
@@ -129,13 +156,24 @@ export function Fiat() {
 
 function KycCard({
   kyc,
+  bridgePhase,
   onStart,
   onRefresh,
 }: {
   kyc: KycInfo;
+  bridgePhase: 'idle' | 'checking' | 'unlocking' | 'creating';
   onStart: () => Promise<void>;
   onRefresh: () => Promise<void>;
 }) {
+  const bridgeMsg =
+    bridgePhase === 'checking'
+      ? 'Revisando cuenta bridge…'
+      : bridgePhase === 'unlocking'
+      ? 'Desbloqueando passkey…'
+      : bridgePhase === 'creating'
+      ? 'Creando G-address on-chain (sponsored)…'
+      : null;
+  const busy = bridgePhase !== 'idle';
   const statusLabel = {
     not_started: 'Sin iniciar',
     pending: 'Pendiente de revisión',
@@ -161,7 +199,10 @@ function KycCard({
             Necesitás completar verificación de identidad (INE + comprobante) en Etherfuse antes
             de poder cambiar de fiat a USDC o viceversa.
           </p>
-          <Button onClick={onStart}>Empezar KYC</Button>
+          {bridgeMsg && <p className="text-xs text-accesly-subtle">{bridgeMsg}</p>}
+          <Button onClick={onStart} loading={busy} disabled={busy}>
+            {busy ? 'Preparando…' : 'Empezar KYC'}
+          </Button>
         </>
       ) : (
         <>
