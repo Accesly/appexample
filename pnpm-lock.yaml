@@ -9,11 +9,11 @@ importers:
   .:
     dependencies:
       '@accesly/core':
-        specifier: 1.13.2
-        version: 1.13.2
+        specifier: 1.13.3
+        version: 1.13.3
       '@accesly/react':
-        specifier: 1.13.2
-        version: 1.13.2(react@18.3.1)
+        specifier: 1.13.3
+        version: 1.13.3(react@18.3.1)
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -54,8 +54,8 @@ importers:
 
 packages:
 
-  '@accesly/core@1.13.2':
-    resolution: {integrity: sha512-eu4ZMR6VxdLf5iqOk8W3CP8BP761ZCu1//xTOQvqUSghrcJl2IL3fxbbJbJMDidhYIp7DPv8K4X/U+mEAb4YLg==}
+  '@accesly/core@1.13.3':
+    resolution: {integrity: sha512-PuAt9oD4g1xei7MMzZd9X5oi3QQCVpUm+vY6FOk8U1qfGfp6T6PL6P07aadiVbilcsC3GzhlDZOt/3u1ebiGbg==}
     engines: {node: '>=20'}
     peerDependencies:
       fake-indexeddb: '*'
@@ -63,8 +63,8 @@ packages:
       fake-indexeddb:
         optional: true
 
-  '@accesly/react@1.13.2':
-    resolution: {integrity: sha512-pRPo0Xp7Xc8iC7fDMPcLl/Z6I6zEYYhvOXyGcYQaGoavRS0IsD0EA/McEXaj/BDz7CTo+XhvALwO7KmJ9Gxlxw==}
+  '@accesly/react@1.13.3':
+    resolution: {integrity: sha512-+LKU8fz2hxPSh4F4OlZOa2zKoroAF4mKvDwszHhoay1jft+rvQ/Exxzqi+EMVBAlh2uX8s7ZAoLQ2WetDlnrUA==}
     engines: {node: '>=20'}
     peerDependencies:
       react: '>=18.0.0'
@@ -1575,7 +1575,7 @@ packages:
 
 snapshots:
 
-  '@accesly/core@1.13.2':
+  '@accesly/core@1.13.3':
     dependencies:
       '@noble/ciphers': 1.3.0
       '@noble/curves': 1.9.7
@@ -1588,9 +1588,9 @@ snapshots:
       - encoding
       - supports-color
 
-  '@accesly/react@1.13.2(react@18.3.1)':
+  '@accesly/react@1.13.3(react@18.3.1)':
     dependencies:
-      '@accesly/core': 1.13.2
+      '@accesly/core': 1.13.3
       react: 18.3.1
     transitivePeerDependencies:
       - bare-url

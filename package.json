@@ -11,8 +11,8 @@
     "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {
-    "@accesly/core": "1.13.2",
-    "@accesly/react": "1.13.2",
+    "@accesly/core": "1.13.3",
+    "@accesly/react": "1.13.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.30.4"
