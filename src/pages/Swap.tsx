@@ -47,6 +47,15 @@ export function Swap() {
   const [preview, setPreview] = useState<QuotePreview | null>(null);
   const [quoting, setQuoting] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
+  /**
+   * Fase IV: swap-sdex devuelve 409 con "G-address bridge not bootstrapped"
+   * cuando el user todavía no corrió wallet.bootstrapG. En vez de mostrarlo
+   * como error duro, exponemos un botón "Activar bridge" que hace el
+   * bootstrap + re-arma el preview.
+   */
+  const [needsBootstrap, setNeedsBootstrap] = useState(false);
+  const [bootstrappingNow, setBootstrappingNow] = useState(false);
+  const [previewTrigger, setPreviewTrigger] = useState(0);
 
   // Quote en vivo con debounce. Primero prueba Soroswap; si no hay path (422 o
   // similar — typical en testnet sin pools), reintenta contra SDEX classic.
@@ -109,9 +118,17 @@ export function Swap() {
           }
         } catch (err) {
           if (!cancelled) {
-            setPreview(null);
-            setQuoting(false);
-            setQuoteError(formatError(err));
+            const msg = formatError(err);
+            if (msg.includes('G-address bridge not bootstrapped')) {
+              setNeedsBootstrap(true);
+              setPreview(null);
+              setQuoting(false);
+              setQuoteError(null);
+            } else {
+              setPreview(null);
+              setQuoting(false);
+              setQuoteError(msg);
+            }
           }
         }
       }
@@ -120,7 +137,30 @@ export function Swap() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [amount, fromAsset, toAsset, slippageBps, phase.kind, _internal.endpoints]);
+  }, [amount, fromAsset, toAsset, slippageBps, phase.kind, _internal.endpoints, previewTrigger]);
+
+  async function onActivateBridge() {
+    if (!auth.username) {
+      setError('No hay sesión activa.');
+      return;
+    }
+    setError(null);
+    setBootstrappingNow(true);
+    try {
+      const material = await wallet.unlockForSigning(auth.username);
+      await wallet.bootstrapG({
+        fragmentF1Plain: material.fragmentF1Plain,
+        fragmentF2Key: material.fragmentF2Key,
+        ownerPubkey: material.ownerPubkey,
+      });
+      setNeedsBootstrap(false);
+      setPreviewTrigger((n) => n + 1); // re-arma preview ahora que la G existe
+    } catch (err) {
+      setError(formatError(err));
+    } finally {
+      setBootstrappingNow(false);
+    }
+  }
 
   function flip() {
     setFromAsset((prev) => (prev === 'XLM' ? 'USDC' : 'XLM'));
@@ -375,9 +415,27 @@ export function Swap() {
             </div>
           )}
 
-          {!quoting && !preview && quoteError && amount.trim() && (
+          {!quoting && !preview && quoteError && amount.trim() && !needsBootstrap && (
             <div className="rounded-lg bg-accesly-bg border border-accesly-border px-3 py-2 text-xs text-accesly-danger">
               No hay liquidez disponible: {quoteError}
+            </div>
+          )}
+
+          {needsBootstrap && (
+            <div className="rounded-lg bg-accesly-bg border border-accesly-border px-3 py-2 text-xs space-y-2">
+              <p>
+                Para hacer swap por SDEX necesitás tu <strong>bridge G-address</strong>.
+                Esto se crea una sola vez, gratis (el backend paga la reserva).
+              </p>
+              <Button
+                type="button"
+                variant="primary"
+                loading={bootstrappingNow}
+                disabled={bootstrappingNow}
+                onClick={onActivateBridge}
+              >
+                {bootstrappingNow ? 'Creando bridge…' : 'Activar bridge'}
+              </Button>
             </div>
           )}
 
