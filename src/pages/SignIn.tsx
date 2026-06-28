@@ -4,6 +4,7 @@ import { useAccesly } from '@accesly/react';
 import { formatError } from '@accesly/core';
 import { Button } from '../components/Button';
 import { ErrorMessage } from '../components/ErrorMessage';
+import { GoogleSignInButton } from '../components/GoogleSignInButton';
 
 export function SignIn() {
   const { auth } = useAccesly();
@@ -43,7 +44,13 @@ export function SignIn() {
       <h1 className="text-2xl font-bold mb-1">Inicia sesión</h1>
       <p className="accesly-hint mb-6">Cognito con USER_SRP_AUTH — tu contraseña jamás sale del navegador en plano.</p>
 
-      <div className="accesly-card p-6">
+      <div className="accesly-card p-6 space-y-4">
+        <GoogleSignInButton onError={setError} />
+        <div className="flex items-center gap-3 text-xs text-accesly-subtle">
+          <span className="flex-1 border-t border-accesly-border" />
+          o con email
+          <span className="flex-1 border-t border-accesly-border" />
+        </div>
         <form onSubmit={handleSignIn} className="space-y-4">
           <div>
             <label className="accesly-label" htmlFor="email">Email</label>

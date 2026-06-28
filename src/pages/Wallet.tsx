@@ -1,15 +1,14 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   useAccesly,
+  useAppConfig,
   useBalance,
   useWalletHistory,
   useWalletStatus,
 } from '@accesly/react';
 import type { WalletHistoryItem } from '@accesly/core';
-import { formatError, shortAddress, stroopsToXlm, walletExplorerUrl } from '@accesly/core';
+import { shortAddress, stroopsToXlm, walletExplorerUrl } from '@accesly/core';
 import { Button } from '../components/Button';
-import { ErrorMessage } from '../components/ErrorMessage';
 import { InfoNote } from '../components/InfoNote';
 import { WalletStatusBadge } from '../components/WalletStatusBadge';
 
@@ -22,51 +21,22 @@ import { WalletStatusBadge } from '../components/WalletStatusBadge';
  *
  * Las activities ya vienen filtradas + tipadas por el backend; no hay que
  * decodear XDR ni adivinar qué es cada evento.
+ *
+ * Sin botones "Activar XLM/USDC" — desde SDK 1.14.1 el SDK auto-enroll-a
+ * el asset en el primer `tx.send`/`tx.swap` (reusa el material ya unlocked,
+ * 0 prompts extra). El flujo manual sigue disponible en `/dev-tools` para
+ * QA / dashboard de developer.
  */
-type ActivateState =
-  | { kind: 'idle' }
-  | { kind: 'unlocking' }
-  | { kind: 'activating' }
-  | { kind: 'success'; txHash: string };
-
 export function Wallet() {
-  const { auth, wallet } = useAccesly();
+  const { wallet } = useAccesly();
   const navigate = useNavigate();
   const status = useWalletStatus();
   const balance = useBalance(status.walletAddress);
   const activity = useWalletHistory(status.walletAddress);
-  const [activate, setActivate] = useState<ActivateState>({ kind: 'idle' });
-  const [activateError, setActivateError] = useState<string | null>(null);
-
-  async function handleActivateUsdc() {
-    if (!auth.username) {
-      setActivateError('No hay sesión activa.');
-      return;
-    }
-    setActivateError(null);
-    let material;
-    try {
-      setActivate({ kind: 'unlocking' });
-      material = await wallet.unlockForSigning(auth.username);
-    } catch (err) {
-      setActivate({ kind: 'idle' });
-      setActivateError(formatError(err));
-      return;
-    }
-    try {
-      setActivate({ kind: 'activating' });
-      const result = await wallet.activateAsset({
-        asset: 'USDC',
-        fragmentF1Plain: material.fragmentF1Plain,
-        fragmentF2Key: material.fragmentF2Key,
-        ownerPubkey: material.ownerPubkey,
-      });
-      setActivate({ kind: 'success', txHash: result.txHash });
-    } catch (err) {
-      setActivate({ kind: 'idle' });
-      setActivateError(formatError(err));
-    }
-  }
+  // SDK 1.15.0 (Fase 1): el appConfig se lee del backend y refetch-ea cada 60s.
+  // Acá solo lo usamos para mostrar diagnóstico — Fase 2+ lo conecta a la lista
+  // de trustlines, branding live, providers de auth, etc.
+  const { config: appConfig } = useAppConfig();
 
   if (status.status === 'no-wallet') {
     return (
@@ -91,7 +61,7 @@ export function Wallet() {
             Smart Account en Stellar testnet · status push-eado vía SSE
           </p>
         </div>
-        <WalletStatusBadge status={status.status === 'no-wallet' ? 'unknown' : status.status} />
+        <WalletStatusBadge status={status.status} />
       </header>
 
       <div className="accesly-card p-6 space-y-5">
@@ -180,40 +150,20 @@ export function Wallet() {
           <Button
             variant="secondary"
             onClick={() => void wallet.fundTestnet(status.walletAddress!)}
-            className="w-full"
+            className="w-full sm:col-span-2"
           >
             Fondear (friendbot)
           </Button>
-          <Button
-            variant="secondary"
-            onClick={handleActivateUsdc}
-            loading={activate.kind === 'unlocking' || activate.kind === 'activating'}
-            disabled={status.status !== 'on-chain' || activate.kind !== 'idle'}
-            className="w-full sm:col-span-2"
-          >
-            {activate.kind === 'unlocking'
-              ? 'Desbloqueando passkey…'
-              : activate.kind === 'activating'
-              ? 'Activando USDC en el Smart Account…'
-              : activate.kind === 'success'
-              ? 'USDC activado ✓'
-              : 'Activar USDC en esta wallet'}
-          </Button>
         </div>
-        <ErrorMessage message={activateError} />
-        {activate.kind === 'success' && (
-          <p className="text-xs text-accesly-subtle">
-            Rule biometric-tx para USDC_SAC agregado vía admin-cfg. Ya podés enviar USDC desde
-            "Enviar pago". <a
-              href={walletExplorerUrl(activate.txHash, 'testnet').replace('/contract/', '/tx/')}
-              target="_blank"
-              rel="noreferrer"
-              className="text-blue-700"
-            >
-              ver tx →
-            </a>
-          </p>
-        )}
+        <InfoNote tone="info">
+          ¿Wallet vieja sin XLM/USDC rule? El SDK lo detecta en el primer envío y
+          enroll-a el asset transparentemente (0 prompts extra). El flujo manual
+          sigue disponible en{' '}
+          <Link to="/dev-tools" className="text-blue-700 hover:underline">
+            dev tools
+          </Link>{' '}
+          para QA o políticas de desarrollador.
+        </InfoNote>
       </div>
 
       <div className="accesly-card p-6">
@@ -225,7 +175,7 @@ export function Wallet() {
         ) : (
           <ul className="space-y-3">
             {activity.events.map((e) => (
-              <ActivityRow key={`${e.txHash}:${e.ledger}`} event={e} />
+              <ActivityRow key={`${e.txToid}:${e.eventToid}`} event={e} />
             ))}
           </ul>
         )}
@@ -236,6 +186,20 @@ export function Wallet() {
         Lambda <code>wallet-stream</code>. Una sola conexión TCP multiplexa los
         3 streams. Cero polling — el backend push-ea cambios cuando los detecta.
       </InfoNote>
+
+      <div className="text-center text-xs text-accesly-subtle space-y-1">
+        <Link to="/dev-tools" className="hover:text-accesly-ink block">
+          Dev tools · flujos del dashboard del developer
+        </Link>
+        {appConfig && (
+          <p>
+            appConfig schema v{appConfig.schemaVersion ?? '0 (legacy)'} ·{' '}
+            {appConfig.trustlines
+              ? `${appConfig.trustlines.filter((t) => t.enabled).length} trustlines habilitadas`
+              : 'config legacy (sin trustlines schema v1)'}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

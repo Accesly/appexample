@@ -4,6 +4,7 @@ import { useAccesly } from '@accesly/react';
 import { Button } from '../components/Button';
 import { ErrorMessage } from '../components/ErrorMessage';
 import { InfoNote } from '../components/InfoNote';
+import { GoogleSignInButton } from '../components/GoogleSignInButton';
 import { formatError } from '@accesly/core';
 
 type Step = 'form' | 'confirm';
@@ -74,7 +75,14 @@ export function SignUp() {
 
       <div className="accesly-card p-6 space-y-4">
         {step === 'form' && (
-          <form onSubmit={handleSignUp} className="space-y-4">
+          <>
+            <GoogleSignInButton onError={setError} />
+            <div className="flex items-center gap-3 text-xs text-accesly-subtle">
+              <span className="flex-1 border-t border-accesly-border" />
+              o con email
+              <span className="flex-1 border-t border-accesly-border" />
+            </div>
+            <form onSubmit={handleSignUp} className="space-y-4">
             <div>
               <label className="accesly-label" htmlFor="email">
                 Email
@@ -113,7 +121,8 @@ export function SignUp() {
             <Button type="submit" loading={loading} className="w-full">
               Continuar
             </Button>
-          </form>
+            </form>
+          </>
         )}
 
         {step === 'confirm' && (

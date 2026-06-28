@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAccesly, useBalance, useWalletStatus } from '@accesly/react';
 import {
   formatError,
+  GAddressNotBootstrappedError,
   stroopsToXlm,
   xlmToStroops,
   type TransferAsset,
@@ -26,7 +27,6 @@ type Phase =
   | { kind: 'idle' }
   | { kind: 'quoting' }
   | { kind: 'unlocking' }
-  | { kind: 'bootstrap-g' }
   | { kind: 'submitting' }
   | { kind: 'success'; txHash: string; explorerUrl: string; received: string; toAsset: TransferAsset; venue: 'soroswap' | 'sdex' };
 
@@ -118,8 +118,7 @@ export function Swap() {
           }
         } catch (err) {
           if (!cancelled) {
-            const msg = formatError(err);
-            if (msg.includes('G-address bridge not bootstrapped')) {
+            if (err instanceof GAddressNotBootstrappedError) {
               setNeedsBootstrap(true);
               setPreview(null);
               setQuoting(false);
@@ -127,7 +126,7 @@ export function Swap() {
             } else {
               setPreview(null);
               setQuoting(false);
-              setQuoteError(msg);
+              setQuoteError(formatError(err));
             }
           }
         }
@@ -219,23 +218,10 @@ export function Swap() {
       ownerPubkey: material.ownerPubkey,
     };
 
-    // Fase IV: swapViaSdex requiere que la G-address bridge esté bootstrapped.
-    // Es idempotente — si ya está, retorna sin tocar nada.
-    if (venue === 'sdex') {
-      try {
-        setPhase({ kind: 'bootstrap-g' });
-        await wallet.bootstrapG({
-          fragmentF1Plain: material.fragmentF1Plain,
-          fragmentF2Key: material.fragmentF2Key,
-          ownerPubkey: material.ownerPubkey,
-        });
-      } catch (err) {
-        setPhase({ kind: 'idle' });
-        setError(formatError(err));
-        return;
-      }
-    }
-
+    // Desde SDK 1.14.2, `tx.swapViaSdex` auto-bootstrapea la G-address si el
+    // backend devuelve GAddressNotBootstrappedError. Por eso ya no hace falta
+    // un pre-bootstrap explícito acá. El primer SDEX swap del user paga ~10s
+    // extra (sponsor + ChangeTrust + EndSponsoring) dentro del mismo flujo.
     try {
       setPhase({ kind: 'submitting' });
       const result =
@@ -260,7 +246,6 @@ export function Swap() {
   const busy =
     phase.kind === 'quoting' ||
     phase.kind === 'unlocking' ||
-    phase.kind === 'bootstrap-g' ||
     phase.kind === 'submitting';
   const availableFrom = fromAsset === 'USDC' ? balance.usdc : balance.xlm;
 
@@ -475,8 +460,6 @@ export function Swap() {
             >
               {phase.kind === 'unlocking'
                 ? 'Desbloqueando passkey…'
-                : phase.kind === 'bootstrap-g'
-                ? 'Preparando bridge G-address…'
                 : phase.kind === 'submitting'
                 ? 'Swap en curso…'
                 : quoting
