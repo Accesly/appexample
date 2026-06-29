@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { useBranding } from '@accesly/react';
 import { Layout } from './components/Layout';
 import { AuthGuard } from './components/AuthGuard';
 import { Landing } from './pages/Landing';
@@ -14,6 +15,10 @@ import { Recover } from './pages/Recover';
 import { DevTools } from './pages/DevTools';
 
 export function App() {
+  // Phase 3: live branding tokens. The hook writes the appConfig colours to
+  // document.documentElement as CSS vars; Tailwind picks them up wherever the
+  // theme references --accesly-primary (etc.).
+  useBranding();
   return (
     <Layout>
       <Routes>
