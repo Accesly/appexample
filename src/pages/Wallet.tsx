@@ -1,284 +1,39 @@
-import { Link, useNavigate } from 'react-router-dom';
-import {
-  useAccesly,
-  useAppConfig,
-  useBalance,
-  useWalletHistory,
-  useWalletStatus,
-} from '@accesly/react';
-import type { WalletHistoryItem } from '@accesly/core';
-import { shortAddress, stroopsToXlm, walletExplorerUrl } from '@accesly/core';
-import { Button } from '../components/Button';
-import { InfoNote } from '../components/InfoNote';
-import { WalletStatusBadge } from '../components/WalletStatusBadge';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAccesly } from '@accesly/react';
+import { WalletHome } from '@accesly/react/kit';
 
 /**
- * /wallet — todo event-driven via SSE.
- *
- * `useWalletStatus`, `useBalance`, `useWalletActivity` comparten 1 sola
- * conexión SSE (multiplexada por wallet address). Sin setInterval, sin
- * polling — el backend push-ea cambios en tiempo real.
- *
- * Las activities ya vienen filtradas + tipadas por el backend; no hay que
- * decodear XDR ni adivinar qué es cada evento.
- *
- * Sin botones "Activar XLM/USDC" — desde SDK 1.14.1 el SDK auto-enroll-a
- * el asset en el primer `tx.send`/`tx.swap` (reusa el material ya unlocked,
- * 0 prompts extra). El flujo manual sigue disponible en `/dev-tools` para
- * QA / dashboard de developer.
+ * Si el user ya tiene wallet en este device → renderea <WalletHome>.
+ * Si no → manda a /create-wallet (post-recovery o nuevo signup que se saltó).
  */
 export function Wallet() {
-  const { wallet } = useAccesly();
   const navigate = useNavigate();
-  const status = useWalletStatus();
-  const balance = useBalance(status.walletAddress);
-  const activity = useWalletHistory(status.walletAddress);
-  // SDK 1.15.0 (Fase 1): el appConfig se lee del backend y refetch-ea cada 60s.
-  // Acá solo lo usamos para mostrar diagnóstico — Fase 2+ lo conecta a la lista
-  // de trustlines, branding live, providers de auth, etc.
-  const { config: appConfig } = useAppConfig();
+  const { wallet, auth } = useAccesly();
+  const [checked, setChecked] = useState(false);
 
-  if (status.status === 'no-wallet') {
+  useEffect(() => {
+    if (!auth.username) return;
+    let cancelled = false;
+    void (async () => {
+      const stored = await wallet.getStoredCredential(auth.username!).catch(() => null);
+      if (cancelled) return;
+      if (!stored?.walletAddress) {
+        navigate('/create-wallet');
+      } else {
+        setChecked(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [auth.username, wallet, navigate]);
+
+  if (!checked) {
     return (
-      <div className="max-w-xl mx-auto accesly-card p-6 text-center space-y-4">
-        <h1 className="text-xl font-semibold">No tenés wallet todavía</h1>
-        <p className="accesly-hint">Creala con tu passkey desde la pantalla anterior.</p>
-        <Button onClick={() => navigate('/create-wallet')}>Crear wallet</Button>
-      </div>
+      <div className="text-center py-12 text-sm text-neutral-500">Cargando wallet…</div>
     );
   }
 
-  if (!status.walletAddress) {
-    return <div className="text-center text-accesly-subtle py-12">Cargando wallet…</div>;
-  }
-
-  return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <header className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Tu wallet</h1>
-          <p className="accesly-hint mt-1">
-            Smart Account en Stellar testnet · status push-eado vía SSE
-          </p>
-        </div>
-        <WalletStatusBadge status={status.status} />
-      </header>
-
-      <div className="accesly-card p-6 space-y-5">
-        <div>
-          <div className="accesly-label">Dirección del Smart Account</div>
-          <div className="flex flex-wrap items-center gap-2">
-            <code className="flex-1 min-w-0 font-mono text-xs sm:text-sm break-all px-3 py-2 rounded-lg bg-accesly-bg border border-accesly-border">
-              {status.walletAddress}
-            </code>
-            <a
-              href={walletExplorerUrl(status.walletAddress, 'testnet')}
-              target="_blank"
-              rel="noreferrer"
-              className="px-4 py-2.5 rounded-lg bg-white border border-accesly-border text-sm font-medium hover:border-accesly-ink transition"
-            >
-              Ver en explorer
-            </a>
-          </div>
-          <p className="text-xs text-accesly-subtle mt-2">
-            {shortAddress(status.walletAddress)}
-            {status.isStale && ' · status sin confirmar > 60s'}
-          </p>
-        </div>
-
-        <div className="border-t border-accesly-border pt-5 grid sm:grid-cols-2 gap-4">
-          <div>
-            <div className="accesly-label">Balance XLM</div>
-            <div className="text-2xl font-semibold">
-              {balance.isLoading ? '…' : balance.xlm ?? '0'}{' '}
-              <span className="text-sm font-normal text-accesly-subtle">XLM</span>
-            </div>
-          </div>
-          <div>
-            <div className="accesly-label flex items-center gap-1.5">
-              Balance USDC
-              <span className="text-[10px] uppercase tracking-wide text-accesly-subtle bg-accesly-bg px-1.5 py-0.5 rounded">SAC</span>
-            </div>
-            <div className="text-2xl font-semibold">
-              {balance.isLoading ? '…' : balance.usdc ?? '0'}{' '}
-              <span className="text-sm font-normal text-accesly-subtle">USDC</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                if (status.walletAddress) {
-                  void navigator.clipboard.writeText(status.walletAddress);
-                }
-              }}
-              className="text-xs text-blue-700 hover:underline mt-1"
-            >
-              Copiar dirección para recibir USDC
-            </button>
-          </div>
-          {balance.error && (
-            <p className="text-xs text-accesly-danger sm:col-span-2">No se pudo cargar el balance.</p>
-          )}
-        </div>
-      </div>
-
-      <div className="accesly-card p-6 space-y-3">
-        <h2 className="font-semibold">Acciones</h2>
-        <div className="grid sm:grid-cols-2 gap-3">
-          <Button
-            onClick={() => navigate('/send')}
-            disabled={status.status !== 'on-chain'}
-            className="w-full"
-          >
-            Enviar pago
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => navigate('/swap')}
-            disabled={status.status !== 'on-chain'}
-            className="w-full"
-          >
-            Swap XLM ↔ USDC
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => navigate('/fiat')}
-            disabled={status.status !== 'on-chain'}
-            className="w-full"
-          >
-            Fiat ⇄ USDC (Etherfuse)
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => void wallet.fundTestnet(status.walletAddress!)}
-            className="w-full sm:col-span-2"
-          >
-            Fondear (friendbot)
-          </Button>
-        </div>
-        <InfoNote tone="info">
-          ¿Wallet vieja sin XLM/USDC rule? El SDK lo detecta en el primer envío y
-          enroll-a el asset transparentemente (0 prompts extra). El flujo manual
-          sigue disponible en{' '}
-          <Link to="/dev-tools" className="text-blue-700 hover:underline">
-            dev tools
-          </Link>{' '}
-          para QA o políticas de desarrollador.
-        </InfoNote>
-      </div>
-
-      <div className="accesly-card p-6">
-        <h2 className="font-semibold mb-3">Actividad reciente</h2>
-        {activity.isLoading && activity.events.length === 0 ? (
-          <div className="text-sm text-accesly-subtle">Esperando primer evento…</div>
-        ) : activity.events.length === 0 ? (
-          <div className="text-sm text-accesly-subtle">Aún no hay actividad on-chain.</div>
-        ) : (
-          <ul className="space-y-3">
-            {activity.events.map((e) => (
-              <ActivityRow key={`${e.txToid}:${e.eventToid}`} event={e} />
-            ))}
-          </ul>
-        )}
-      </div>
-
-      <InfoNote tone="info" title="Real-time via SSE">
-        Status, balance y actividad se sirven via Server-Sent Events desde el
-        Lambda <code>wallet-stream</code>. Una sola conexión TCP multiplexa los
-        3 streams. Cero polling — el backend push-ea cambios cuando los detecta.
-      </InfoNote>
-
-      <div className="text-center text-xs text-accesly-subtle space-y-1">
-        <Link to="/dev-tools" className="hover:text-accesly-ink block">
-          Dev tools · flujos del dashboard del developer
-        </Link>
-        {appConfig && (
-          <p>
-            appConfig schema v{appConfig.schemaVersion ?? '0 (legacy)'} ·{' '}
-            {appConfig.trustlines
-              ? `${appConfig.trustlines.filter((t) => t.enabled).length} trustlines habilitadas`
-              : 'config legacy (sin trustlines schema v1)'}
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ActivityRow({ event }: { event: WalletHistoryItem }) {
-  const ts = event.timestamp ? new Date(event.timestamp).toLocaleString() : `ledger ${event.ledger}`;
-  // El backend ya nos arma el URL con el formato canónico tx/<txToid>#<eventToid>.
-  const explorerHref = event.explorerUrl;
-
-  if (event.type === 'wallet-created') {
-    return (
-      <li className="border-b border-accesly-border pb-2 last:border-b-0">
-        <div className="flex justify-between items-baseline">
-          <span className="font-medium text-sm">✨ Wallet creada</span>
-          <span className="text-xs text-accesly-subtle">{ts}</span>
-        </div>
-        {explorerHref && (
-          <a href={explorerHref} target="_blank" rel="noreferrer" className="text-[10px] text-blue-700">
-            ver contrato →
-          </a>
-        )}
-      </li>
-    );
-  }
-
-  if (event.type === 'signer-rotated') {
-    return (
-      <li className="border-b border-accesly-border pb-2 last:border-b-0">
-        <div className="flex justify-between items-baseline">
-          <span className="font-medium text-sm">🔑 Rotación de signer</span>
-          <span className="text-xs text-accesly-subtle">{ts}</span>
-        </div>
-        <a href={explorerHref} target="_blank" rel="noreferrer" className="text-[10px] text-blue-700">
-          ver tx →
-        </a>
-      </li>
-    );
-  }
-
-  // Default a XLM cuando el backend no manda asset (audits pre-1.4).
-  const asset = event.asset ?? 'XLM';
-
-  if (event.type === 'transfer-in') {
-    return (
-      <li className="border-b border-accesly-border pb-2 last:border-b-0">
-        <div className="flex justify-between items-baseline">
-          <span className="font-medium text-sm text-accesly-success">
-            ↓ Recibiste {stroopsToXlm(event.amountStroops ?? '0')} {asset}
-          </span>
-          <span className="text-xs text-accesly-subtle">{ts}</span>
-        </div>
-        <div className="text-xs font-mono text-accesly-subtle mt-1">
-          De: {shortAddress(event.from ?? '')}
-        </div>
-        <a href={explorerHref} target="_blank" rel="noreferrer" className="text-[10px] text-blue-700">
-          ver tx →
-        </a>
-      </li>
-    );
-  }
-
-  if (event.type === 'transfer-out') {
-    return (
-      <li className="border-b border-accesly-border pb-2 last:border-b-0">
-        <div className="flex justify-between items-baseline">
-          <span className="font-medium text-sm">
-            ↑ Mandaste {stroopsToXlm(event.amountStroops ?? '0')} {asset}
-          </span>
-          <span className="text-xs text-accesly-subtle">{ts}</span>
-        </div>
-        <div className="text-xs font-mono text-accesly-subtle mt-1">
-          A: {shortAddress(event.to ?? '')}
-        </div>
-        <a href={explorerHref} target="_blank" rel="noreferrer" className="text-[10px] text-blue-700">
-          ver tx →
-        </a>
-      </li>
-    );
-  }
-
-  return null;
+  return <WalletHome />;
 }

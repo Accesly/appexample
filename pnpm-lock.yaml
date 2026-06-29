@@ -12,8 +12,8 @@ importers:
         specifier: 1.20.0
         version: 1.20.0
       '@accesly/react':
-        specifier: 1.21.3
-        version: 1.21.3(react@18.3.1)
+        specifier: 1.22.0
+        version: 1.22.0(react@18.3.1)
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -63,8 +63,8 @@ packages:
       fake-indexeddb:
         optional: true
 
-  '@accesly/react@1.21.3':
-    resolution: {integrity: sha512-XzHzzVimA5+3iAzlTFs5Rj288OlSx4ey82NrwN3uXv1aTJVPiqS0/6xnnTkF3rRAhjwhp7E2b1KmTVXBpM+82g==}
+  '@accesly/react@1.22.0':
+    resolution: {integrity: sha512-zFNRpdo/kEFWxa2EPmVp+L8GzXjKiOXFhj1qfA7KeOksbq/VLn454pf9lu/luggn3lzdl4WfzXevLEKc7d9s8w==}
     engines: {node: '>=20'}
     peerDependencies:
       react: '>=18.0.0'
@@ -1588,7 +1588,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@accesly/react@1.21.3(react@18.3.1)':
+  '@accesly/react@1.22.0(react@18.3.1)':
     dependencies:
       '@accesly/core': 1.20.0
       react: 18.3.1

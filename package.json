@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@accesly/core": "1.20.0",
-    "@accesly/react": "1.21.3",
+    "@accesly/react": "1.22.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.30.4"

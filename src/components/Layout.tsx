@@ -1,14 +1,18 @@
 import type { ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAccesly } from '@accesly/react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAccesly, useBranding } from '@accesly/react';
 
-interface LayoutProps {
-  children: ReactNode;
-}
-
-export function Layout({ children }: LayoutProps) {
+/**
+ * Shell minimal: top bar con brand (vía useBranding del dashboard) +
+ * nav (Wallet / Swap / Historial) cuando hay sesión.
+ */
+export function Layout({ children }: { children: ReactNode }) {
   const { auth } = useAccesly();
+  const branding = useBranding();
+  const location = useLocation();
   const navigate = useNavigate();
+
+  const authed = auth.status === 'authenticated';
 
   async function handleSignOut() {
     try {
@@ -18,85 +22,100 @@ export function Layout({ children }: LayoutProps) {
     }
   }
 
-  const authed = auth.status === 'authenticated';
-
   return (
-    <div className="min-h-full flex flex-col">
-      <header className="border-b border-accesly-border bg-white">
-        <div className="max-w-5xl mx-auto px-5 py-4 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2.5 group">
-            <div className="w-8 h-8 rounded-lg bg-accesly-ink flex items-center justify-center">
-              <svg
-                viewBox="0 0 24 24"
-                className="w-5 h-5"
-                fill="none"
-                stroke="#5b6cff"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+    <div className="min-h-screen flex flex-col bg-neutral-50 text-neutral-900">
+      <header className="border-b border-neutral-200 bg-white">
+        <div className="max-w-5xl mx-auto px-5 py-3 flex items-center justify-between">
+          <Link to={authed ? '/wallet' : '/'} className="flex items-center gap-2.5">
+            {branding.logoUrl ? (
+              <img src={branding.logoUrl} alt="" className="h-8 w-8 rounded-lg" />
+            ) : (
+              <span
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm"
+                style={{ background: 'var(--accesly-primary, #8B6CE7)' }}
               >
-                <path d="M6 18 L12 6 L18 18 M8.5 14 H15.5" />
-              </svg>
-            </div>
-            <div className="flex flex-col leading-tight">
-              <span className="font-semibold text-accesly-ink group-hover:text-accesly-accent transition">
-                Accesly
+                {(branding.displayName ?? 'A').slice(0, 1).toUpperCase()}
               </span>
-              <span className="text-[10px] uppercase tracking-wider text-accesly-subtle">
-                Example · testnet
+            )}
+            <div className="flex flex-col leading-tight">
+              <span className="font-semibold">{branding.displayName ?? 'Accesly'}</span>
+              <span className="text-[10px] uppercase tracking-wider text-neutral-500">
+                example · testnet
               </span>
             </div>
           </Link>
+
           <nav className="flex items-center gap-3 text-sm">
-            <span className="accesly-pill bg-accesly-bg text-accesly-subtle border border-accesly-border">
-              <span
-                className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
-                  authed
-                    ? 'bg-accesly-success'
-                    : auth.status === 'expired'
-                      ? 'bg-accesly-warning'
-                      : 'bg-accesly-subtle'
-                }`}
-              />
-              {auth.status}
-            </span>
             {authed && (
               <>
-                <span className="hidden sm:inline text-accesly-subtle">
-                  {auth.username}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleSignOut}
-                  className="text-sm text-accesly-subtle hover:text-accesly-danger transition"
-                >
-                  Salir
-                </button>
+                <NavLink to="/wallet" active={location.pathname === '/wallet'}>
+                  Wallet
+                </NavLink>
+                <NavLink to="/swap" active={location.pathname === '/swap'}>
+                  Swap
+                </NavLink>
+                <NavLink to="/history" active={location.pathname === '/history'}>
+                  Historial
+                </NavLink>
               </>
+            )}
+            {authed ? (
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="text-xs text-neutral-500 hover:text-red-500 ml-2"
+              >
+                Salir
+              </button>
+            ) : (
+              <Link
+                to="/signin"
+                className="text-xs px-3 py-1.5 rounded-lg text-white"
+                style={{ background: 'var(--accesly-primary, #8B6CE7)' }}
+              >
+                Entrar
+              </Link>
             )}
           </nav>
         </div>
       </header>
-      <main className="flex-1 max-w-5xl w-full mx-auto px-5 py-10">
-        {children}
-      </main>
-      <footer className="border-t border-accesly-border bg-white">
-        <div className="max-w-5xl mx-auto px-5 py-4 flex flex-wrap items-center justify-between gap-2 text-xs text-accesly-subtle">
-          <span>
-            Demo no-custodial · backend{' '}
-            <code className="font-mono text-accesly-ink">dev</code> · Stellar
-            testnet
-          </span>
+
+      <main className="flex-1 max-w-5xl w-full mx-auto px-5 py-10">{children}</main>
+
+      <footer className="border-t border-neutral-200 bg-white">
+        <div className="max-w-5xl mx-auto px-5 py-4 flex flex-wrap items-center justify-between gap-2 text-[11px] text-neutral-400">
+          <span>Demo no-custodial · backend dev · Stellar testnet</span>
           <a
             href="https://github.com/Accesly/SDKAccesly"
             target="_blank"
             rel="noreferrer"
-            className="accesly-link"
+            className="hover:text-neutral-600"
           >
-            @accesly/sdk
+            @accesly/react v1.22.0
           </a>
         </div>
       </footer>
     </div>
+  );
+}
+
+function NavLink({
+  to,
+  active,
+  children,
+}: {
+  to: string;
+  active: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <Link
+      to={to}
+      className={`px-2 py-1 rounded transition ${
+        active ? 'text-neutral-900 font-medium' : 'text-neutral-500 hover:text-neutral-900'
+      }`}
+    >
+      {children}
+    </Link>
   );
 }
