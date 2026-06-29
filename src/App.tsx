@@ -13,6 +13,7 @@ import { Swap } from './pages/Swap';
 import { Fiat } from './pages/Fiat';
 import { Recover } from './pages/Recover';
 import { DevTools } from './pages/DevTools';
+import { KitDemo } from './pages/KitDemo';
 
 export function App() {
   // Phase 3: live branding tokens. The hook writes the appConfig colours to
@@ -23,6 +24,8 @@ export function App() {
     <Layout>
       <Routes>
         <Route path="/" element={<Landing />} />
+        {/* QA: validate dashboard appConfig propagates to SDK hooks + kit. */}
+        <Route path="/kit" element={<KitDemo />} />
         <Route path="/signup" element={<SignUp />} />
         <Route path="/signin" element={<SignIn />} />
         {/* Google OAuth landing — Cognito Hosted UI redirige aquí con ?code=xxx. */}

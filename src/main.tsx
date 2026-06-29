@@ -39,10 +39,14 @@ if (import.meta.env.DEV) {
 const root = document.getElementById('root');
 if (!root) throw new Error('Missing #root container');
 
+// appId puede venir de VITE_ACCESLY_APP_ID para probar contra apps reales del
+// dashboard (ej. `app_d_prueba1_7ut6h`). Default mantiene el legacy.
+const appId = import.meta.env.VITE_ACCESLY_APP_ID ?? 'accesly-example';
+
 createRoot(root).render(
   <StrictMode>
     <AcceslyProvider
-      appId="accesly-example"
+      appId={appId}
       env="dev"
       overrides={{ deviceStore: new IndexedDbDeviceStore() }}
     >
