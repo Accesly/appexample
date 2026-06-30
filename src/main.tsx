@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { AcceslyProvider } from '@accesly/react';
 import { IndexedDbDeviceStore } from '@accesly/core';
 import { App } from './App';
+import { ThemeProvider } from './theme/ThemeContext';
 import './index.css';
 
 // Safety net: en dev, cuando Vite re-pre-bundlea deps (típicamente porque
@@ -45,14 +46,16 @@ const appId = import.meta.env.VITE_ACCESLY_APP_ID ?? 'accesly-example';
 
 createRoot(root).render(
   <StrictMode>
-    <AcceslyProvider
-      appId={appId}
-      env="dev"
-      overrides={{ deviceStore: new IndexedDbDeviceStore() }}
-    >
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
-    </AcceslyProvider>
+    <ThemeProvider>
+      <AcceslyProvider
+        appId={appId}
+        env="dev"
+        overrides={{ deviceStore: new IndexedDbDeviceStore() }}
+      >
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </AcceslyProvider>
+    </ThemeProvider>
   </StrictMode>,
 );

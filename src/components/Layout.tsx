@@ -1,121 +1,155 @@
-import type { ReactNode } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { useAccesly, useBranding } from '@accesly/react';
+import { type ReactNode, useMemo } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useAccesly } from '@accesly/react';
+import { IcoHome, IcoReceive, IcoSend } from './Icons';
 
 /**
- * Shell minimal: top bar con brand (vía useBranding del dashboard) +
- * nav (Wallet / Swap / Historial) cuando hay sesión.
+ * Shell interno del wallet — ya NO contiene el phone-frame (eso lo provee
+ * el `<WalletModal>` que envuelve este árbol). Solo aporta el scroll
+ * interno + el bottom tab bar cuando hay sesión.
+ *
+ * `bare` oculta el tab bar para flows no-autenticados (landing/signin/etc.)
+ * y para wizards con su propio header (create-wallet, recover, callback).
  */
-export function Layout({ children }: { children: ReactNode }) {
+export function Layout({ children, bare }: { children: ReactNode; bare?: boolean }) {
   const { auth } = useAccesly();
-  const branding = useBranding();
   const location = useLocation();
-  const navigate = useNavigate();
 
   const authed = auth.status === 'authenticated';
-
-  async function handleSignOut() {
-    try {
-      await auth.signOut();
-    } finally {
-      navigate('/');
-    }
-  }
+  const showTabs = !bare && authed;
 
   return (
-    <div className="min-h-screen flex flex-col bg-neutral-50 text-neutral-900">
-      <header className="border-b border-neutral-200 bg-white">
-        <div className="max-w-5xl mx-auto px-5 py-3 flex items-center justify-between">
-          <Link to={authed ? '/wallet' : '/'} className="flex items-center gap-2.5">
-            {branding.logoUrl ? (
-              <img src={branding.logoUrl} alt="" className="h-8 w-8 rounded-lg" />
-            ) : (
-              <span
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm"
-                style={{ background: 'var(--accesly-primary, #8B6CE7)' }}
-              >
-                {(branding.displayName ?? 'A').slice(0, 1).toUpperCase()}
-              </span>
-            )}
-            <div className="flex flex-col leading-tight">
-              <span className="font-semibold">{branding.displayName ?? 'Accesly'}</span>
-              <span className="text-[10px] uppercase tracking-wider text-neutral-500">
-                example · testnet
-              </span>
-            </div>
-          </Link>
+    <>
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">{children}</div>
+      {showTabs ? <TabBar pathname={location.pathname} /> : null}
+    </>
+  );
+}
 
-          <nav className="flex items-center gap-3 text-sm">
-            {authed && (
-              <>
-                <NavLink to="/wallet" active={location.pathname === '/wallet'}>
-                  Wallet
-                </NavLink>
-                <NavLink to="/swap" active={location.pathname === '/swap'}>
-                  Swap
-                </NavLink>
-                <NavLink to="/history" active={location.pathname === '/history'}>
-                  Historial
-                </NavLink>
-              </>
-            )}
-            {authed ? (
-              <button
-                type="button"
-                onClick={handleSignOut}
-                className="text-xs text-neutral-500 hover:text-red-500 ml-2"
-              >
-                Salir
-              </button>
-            ) : (
-              <Link
-                to="/signin"
-                className="text-xs px-3 py-1.5 rounded-lg text-white"
-                style={{ background: 'var(--accesly-primary, #8B6CE7)' }}
-              >
-                Entrar
-              </Link>
-            )}
-          </nav>
-        </div>
-      </header>
+const TABS = [
+  { to: '/wallet', label: 'Inicio', Icon: IcoHome },
+  { to: '/send', label: 'Enviar', Icon: IcoSend },
+  { to: '/receive', label: 'Recibir', Icon: IcoReceive },
+] as const;
 
-      <main className="flex-1 max-w-5xl w-full mx-auto px-5 py-10">{children}</main>
+function TabBar({ pathname }: { pathname: string }) {
+  const navigate = useNavigate();
+  const active = useMemo(() => {
+    return TABS.findIndex((t) => pathname === t.to || pathname.startsWith(t.to + '/'));
+  }, [pathname]);
 
-      <footer className="border-t border-neutral-200 bg-white">
-        <div className="max-w-5xl mx-auto px-5 py-4 flex flex-wrap items-center justify-between gap-2 text-[11px] text-neutral-400">
-          <span>Demo no-custodial · backend dev · Stellar testnet</span>
-          <a
-            href="https://github.com/Accesly/SDKAccesly"
-            target="_blank"
-            rel="noreferrer"
-            className="hover:text-neutral-600"
+  return (
+    <div
+      className="flex"
+      style={{
+        borderTop: '1px solid var(--line)',
+        background: 'var(--sheet)',
+        padding: '8px 8px 10px',
+      }}
+    >
+      {TABS.map((t, i) => {
+        const on = i === active;
+        return (
+          <button
+            key={t.to}
+            type="button"
+            onClick={() => navigate(t.to)}
+            className="accesly-btn flex-1 flex flex-col items-center gap-1 py-1.5"
+            style={{
+              background: 'none',
+              border: 'none',
+              color: on ? 'var(--lav-ink)' : 'var(--ink3)',
+            }}
+            aria-current={on ? 'page' : undefined}
           >
-            @accesly/react v1.22.0
-          </a>
-        </div>
-      </footer>
+            <t.Icon size={23} strokeWidth={on ? 2.05 : 1.8} />
+            <span style={{ fontSize: 10.5, fontWeight: on ? 700 : 400 }}>{t.label}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
 
-function NavLink({
-  to,
-  active,
-  children,
+/**
+ * Header reutilizable para subpáginas (con back). El back va a /wallet por
+ * default; el caller puede override con `onBack` para flows wizard.
+ */
+export function PageHeader({
+  title,
+  rightSlot,
+  onBack,
 }: {
-  to: string;
-  active: boolean;
-  children: ReactNode;
+  title: string;
+  rightSlot?: ReactNode;
+  onBack?: () => void;
 }) {
+  const navigate = useNavigate();
   return (
-    <Link
-      to={to}
-      className={`px-2 py-1 rounded transition ${
-        active ? 'text-neutral-900 font-medium' : 'text-neutral-500 hover:text-neutral-900'
-      }`}
+    <div className="flex items-center gap-3" style={{ padding: '26px 0 14px' }}>
+      <button
+        type="button"
+        onClick={onBack ?? (() => navigate('/wallet'))}
+        className="accesly-btn flex items-center justify-center"
+        style={{
+          width: 38,
+          height: 38,
+          borderRadius: 12,
+          border: '1px solid var(--line)',
+          background: 'var(--card)',
+          color: 'var(--ink)',
+        }}
+        aria-label="Volver"
+      >
+        <BackArrow />
+      </button>
+      <div className="flex-1 min-w-0">
+        <h2
+          className="m-0 truncate"
+          style={{ fontWeight: 700, fontSize: 17, color: 'var(--ink)', letterSpacing: '-.005em' }}
+        >
+          {title}
+        </h2>
+        <div
+          style={{
+            width: 28,
+            height: 3,
+            borderRadius: 3,
+            background: 'var(--grad)',
+            marginTop: 7,
+          }}
+        />
+      </div>
+      {rightSlot ? <div className="flex-shrink-0">{rightSlot}</div> : null}
+    </div>
+  );
+}
+
+function BackArrow() {
+  return (
+    <svg
+      width={20}
+      height={20}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M15 5l-7 7 7 7" />
+    </svg>
+  );
+}
+
+export function ScreenScroll({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <div
+      className={`flex-1 overflow-y-auto anim-scr ${className ?? ''}`}
+      style={{ padding: '8px 20px 16px' }}
     >
       {children}
-    </Link>
+    </div>
   );
 }

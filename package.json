@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "@accesly/core": "1.20.0",
-    "@accesly/react": "1.22.0",
+    "@accesly/react": "file:../SDKAccesly/packages/react/accesly-react-2.5.3.tgz",
+    "@stellar/stellar-sdk": "^13.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.30.4"

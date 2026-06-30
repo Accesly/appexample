@@ -1,17 +1,32 @@
 import { MovementsList } from '@accesly/react/kit';
+import { PageHeader, ScreenScroll } from '../components/Layout';
+import { ThemeToggle } from '../components/ThemeToggle';
 
+/**
+ * History — feed completo paginado de 5 en 5 (Brand v3). El sort por tiempo
+ * (descending por ledger) ya viene del hook `useWalletHistory` que usa
+ * `MovementsList` por dentro.
+ */
 export function History() {
   return (
-    <div className="max-w-xl mx-auto space-y-4">
-      <header>
-        <h2 className="text-xl font-bold">Historial</h2>
-        <p className="text-sm text-neutral-500 mt-1">
-          Actividad on-chain de tu wallet — refrescado en tiempo real vía SSE.
-        </p>
-      </header>
-      <div className="rounded-2xl bg-white border border-neutral-200 p-4">
-        <MovementsList limit={50} />
+    <ScreenScroll>
+      <PageHeader title="Historial" rightSlot={<ThemeToggle />} />
+
+      <p style={{ fontSize: 13, color: 'var(--ink2)', margin: '0 2px 14px' }}>
+        Todas las operaciones de tu wallet — refrescadas en tiempo real desde
+        Stellar Expert.
+      </p>
+
+      <div
+        style={{
+          padding: 14,
+          borderRadius: 18,
+          background: 'var(--card)',
+          border: '1px solid var(--line)',
+        }}
+      >
+        <MovementsList source="history" pageSize={5} limit={50} />
       </div>
-    </div>
+    </ScreenScroll>
   );
 }
